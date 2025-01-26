@@ -1,6 +1,12 @@
 #!/usr/bin/python3
 
-import asyncio, os, platform, psutil, aiohttp, subprocess, socket
+from sys import exit
+import os
+hush_login_path = os.path.expanduser("~/.hush_login")
+if os.path.isfile(hush_login_path):
+    exit(0)
+
+import asyncio, platform, psutil, aiohttp, subprocess, socket
 from datetime import datetime
 
 sbc_list = [
