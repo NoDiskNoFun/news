@@ -384,7 +384,7 @@ async def fetch_news():
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                "https://repo.bredos.org/repo/notice.txt", timeout=1
+                "https://raw.githubusercontent.com/BredOS/news/refs/heads/main/notice.txt", timeout=1
             ) as response:
                 response.raise_for_status()
                 return await response.text()
