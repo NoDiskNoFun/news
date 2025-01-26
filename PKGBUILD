@@ -1,7 +1,7 @@
 # Maintainer: Bill Sideris <bill88t@bredos.org>
 
 pkgname=bredos-news
-pkgver=1.0.0
+pkgver=1.0.1
 pkgrel=1
 pkgdesc='BredOS news and system information utillity'
 arch=(any)
@@ -12,7 +12,7 @@ depends=(python)
 
 source=('99-bredos-news.sh' 'bredos-news')
 sha256sums=('5dfa12531be0c234337321fb1f77a2569390f400c63888b02b45f1acbbf9f7e3'
-            '6721ab727f2a3237eeaa760d689d01b343efca11efb865cecaf4976111220607')
+            '0c06c9e87f6adcaffffc5f71380fd9f8ad79ed944e7e26bce73418665c875aa4')
 
 package() {
     mkdir -p "${pkgdir}/usr/bin" "${pkgdir}/etc/profile.d"

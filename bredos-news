@@ -350,7 +350,7 @@ async def get_system_info() -> dict:
         "logged_in_users": logged_in_users,
         "memory_usage": f"{mem_usage_percent:.1f}%",
         "ipv4_address": ip_address,
-        "swap_usage": f"{swap_usage_percent:.1f}%",
+        "swap_usage": f"{swap_usage_percent:.1f}%" if swap_usage_percent is not None else None,
     }
 
 
