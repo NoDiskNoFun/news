@@ -2,13 +2,13 @@
 
 pkgname=bredos-news
 pkgver=1.0.2
-pkgrel=1
+pkgrel=2
 pkgdesc='BredOS news and system information utillity'
 arch=(any)
 url=https://github.com/BredOS/sys-report
 license=('GPL3')
 
-depends=(python)
+depends=('python' 'python-aiohttp' 'python-psutil')
 
 source=('99-bredos-news.sh' 'bredos-news')
 sha256sums=('5dfa12531be0c234337321fb1f77a2569390f400c63888b02b45f1acbbf9f7e3'
