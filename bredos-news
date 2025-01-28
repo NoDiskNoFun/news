@@ -503,7 +503,10 @@ async def main() -> None:
 
     if updates_available is not None:
         if updates_available:
-            print(f"\n{colors.bold}{colors.cyan_t}{updates_available} packages can be upgraded.{colors.endc}")
+            if "Install" not in updates_available:
+                print(f"\n{colors.bold}{colors.cyan_t}{updates_available} packages can be upgraded.{colors.endc}")
+            else:
+                print(f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}")
         else:
             print(f"\n{colors.green_t}You are up to date!{colors.endc}")
 
