@@ -380,6 +380,29 @@ async def get_updates():
         return None
 
 
+async def get_devel_updates():
+    try:
+        await asyncio.create_subprocess_exec(
+            "yay", "--version",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        process = await asyncio.create_subprocess_exec(
+            "yay", "-Qua", "--devel",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        stdout, _ = await process.communicate()
+        updates = stdout.decode()[:-1].split("\n")
+        while "" in updates:
+            updates.remove("")
+        return len(updates) if updates else 0
+    except FileNotFoundError:
+        return "Install `yay` to view development package updates during login."
+    except:
+        return None
+
+
 async def fetch_news():
     try:
         async with aiohttp.ClientSession() as session:
@@ -440,9 +463,9 @@ class colors:
     inverse = "\033[7m"
     uninverse = "\033[27m"
 
-
 async def main() -> None:
     updates_task = get_updates()
+    devel_updates_task = get_devel_updates()
     news_task = fetch_news()
     info_task = get_system_info()
 
@@ -451,9 +474,7 @@ async def main() -> None:
     if sbc_declared in sbc_list:
         device = sbc_declared
 
-    updates_available, news, system_info = await asyncio.gather(
-        updates_task, news_task, info_task
-    )
+    system_info = await info_task
 
     print(f"{colors.yellow_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})")
     print(f"{colors.yellow_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/")
@@ -501,18 +522,45 @@ async def main() -> None:
     print(swap_str)
     print(f"{colors.okblue}Usage of /:{colors.endc} {system_info['disk_usage']}")
 
+    updates_available = None
+    devel_updates_available = None
+    try:
+        async with asyncio.timeout(4):
+            updates_available = await updates_task
+            devel_updates_available = await devel_updates_task
+    except asyncio.TimeoutError:
+        pass
     if updates_available is not None:
-        if updates_available:
-            if isinstance(updates_available, int):
-                print(f"\n{colors.bold}{colors.cyan_t}{updates_available} packages can be upgraded.{colors.endc}")
+        if isinstance(updates_available, str):
+            print(f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}", end="")
+        if isinstance(devel_updates_available, str):
+            print(f"\n{colors.bold}{colors.red_t}{devel_updates_available}{colors.endc}", end="")
+        uisn = isinstance(updates_available, int)
+        disn = isinstance(devel_updates_available, int)
+        if updates_available and uisn:
+            if devel_updates_available and disn:
+                print(f"\n{colors.bold}{colors.cyan_t}{updates_available+devel_updates_available} packages can be upgraded, of which {devel_updates_available} are development packages.{colors.endc}")
             else:
-                print(f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}")
+                print(f"\n{colors.bold}{colors.cyan_t}{updates_available} packages can be upgraded.{colors.endc}")
+        elif devel_updates_available and disn:
+            print(f"\n{colors.bold}{colors.cyan_t}{devel_updates_available} development packages can be upgraded.{colors.endc}")
         else:
             print(f"\n{colors.green_t}You are up to date!{colors.endc}")
+    else:
+        print("\nTimed out waiting for updates.")
 
     print()
+
+    news = None
+    try:
+        async with asyncio.timeout(2):
+            news = await news_task
+    except asyncio.TimeoutError:
+        pass
     print(news if news else "Failed to fetch news.")
 
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    os._exit(0) # Fuck you asyncio
 
 if __name__ == "__main__":
     asyncio.run(main())
