@@ -559,7 +559,6 @@ async def main() -> None:
         pass
     print(news if news else "Failed to fetch news.")
 
-    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
     os._exit(0) # Fuck you asyncio
 
 if __name__ == "__main__":
