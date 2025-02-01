@@ -2,6 +2,7 @@
 
 from sys import exit
 import os
+
 hush_login_path = os.path.expanduser("~/.hush_login")
 if os.path.isfile(hush_login_path):
     exit(0)
@@ -223,9 +224,10 @@ def get_active_ipv4_interfaces() -> dict:
     active_interfaces = {}
     for iface, addrs in psutil.net_if_addrs().items():
         for addr in addrs:
-            if addr.family == socket.AF_INET and addr.address != '127.0.0.1':
+            if addr.family == socket.AF_INET and addr.address != "127.0.0.1":
                 active_interfaces[iface] = addr.address
     return active_interfaces
+
 
 async def get_system_info() -> dict:
     hostname = platform.node()
@@ -330,24 +332,6 @@ async def get_system_info() -> dict:
         else None
     )
 
-    #    try:
-    #        ip_process = await asyncio.create_subprocess_exec(
-    #            "ip",
-    #            "-4",
-    #            "addr",
-    #            "show",
-    #            "enp0s6",
-    #            stdout=asyncio.subprocess.PIPE,
-    #            stderr=asyncio.subprocess.PIPE,
-    #        )
-    #        stdout, _ = await ip_process.communicate()
-    #        ip_lines = stdout.decode().split("\n")
-    #        ip_address = next(
-    #            (line.split()[1].split("/")[0] for line in ip_lines if "inet " in line),
-    #            "Not found",
-    #        )
-    #    except:
-    #        ip_address = "Not found"
     net_ifs = get_active_ipv4_interfaces()
 
     return {
@@ -364,65 +348,67 @@ async def get_system_info() -> dict:
         "logged_in_users": logged_in_users,
         "memory_usage": f"{mem_usage_percent:.1f}%",
         "net_ifs": net_ifs,
-        "swap_usage": f"{swap_usage_percent:.1f}%" if swap_usage_percent is not None else None,
+        "swap_usage": (
+            f"{swap_usage_percent:.1f}%" if swap_usage_percent is not None else None
+        ),
     }
 
 
 async def get_updates():
     if hush_updates:
-        return
+        return  # Do not do anything
     try:
         process = await asyncio.create_subprocess_exec(
             "checkupdates",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            preexec_fn=lambda: os.nice(20),  # Maximum priority
         )
-        future = asyncio.ensure_future(process.communicate())
-        done, pending = await asyncio.wait([future], timeout=1.5)
-        if pending:
-            if p.returncode is None:
-                try:
-                    p.kill()
-                except ProcessLookupError:
-                    pass
-        stdout, _ = await future
-        if pending:
+
+        try:
+            stdout, _ = await asyncio.wait_for(process.communicate(), timeout=5)
+        except asyncio.TimeoutError:
+            process.kill()
             return
-        updates = stdout.decode()[:-1].split("\n")
-        while "" in updates:
-            updates.remove("")
+
+        updates = stdout.decode().strip().split("\n")
+        updates = [line for line in updates if line]
+
         return len(updates) if updates else 0
+
     except FileNotFoundError:
         return "Install `pacman-contrib` to view available updates during login."
-    except:
+    except Exception:
         return
 
 
 async def get_devel_updates():
     if hush_updates:
-        return
+        return  # Do not do anything
     try:
         process = await asyncio.create_subprocess_exec(
-            "yay", "-Qua", "--devel",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            "yay",
+            "-Qua",
+            "--devel",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            preexec_fn=lambda: os.nice(20),  # Maximum priority
         )
-        future = asyncio.ensure_future(process.communicate())
-        done, pending = await asyncio.wait([future], timeout=1.5)
-        if pending:
-            if p.returncode is None:
-                try:
-                    p.kill()
-                except ProcessLookupError:
-                    pass
-        stdout, _ = await future
-        updates = stdout.decode()[:-1].split("\n")
-        while "" in updates:
-            updates.remove("")
+
+        try:
+            stdout, _ = await asyncio.wait_for(process.communicate(), timeout=5)
+        except asyncio.TimeoutError:
+            process.kill()
+            return
+
+        updates = stdout.decode().strip().split("\n")
+        updates = [line for line in updates if line]  # Remove empty lines
+
         return len(updates) if updates else 0
+
     except FileNotFoundError:
         return "Install `yay` to view development package updates during login."
-    except:
+    except Exception:
         return None
 
 
@@ -430,7 +416,8 @@ async def fetch_news():
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                "https://raw.githubusercontent.com/BredOS/news/refs/heads/main/notice.txt", timeout=2
+                "https://raw.githubusercontent.com/BredOS/news/refs/heads/main/notice.txt",
+                timeout=5,
             ) as response:
                 response.raise_for_status()
                 return await response.text()
@@ -486,6 +473,7 @@ class colors:
     inverse = "\033[7m"
     uninverse = "\033[27m"
 
+
 async def main() -> None:
     updates_task = get_updates()
     devel_updates_task = get_devel_updates()
@@ -499,9 +487,15 @@ async def main() -> None:
 
     system_info = await info_task
 
-    print(f"{colors.yellow_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})")
-    print(f"{colors.yellow_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/")
-    print(f"{colors.yellow_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n")
+    print(
+        f"{colors.yellow_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})"
+    )
+    print(
+        f"{colors.yellow_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/"
+    )
+    print(
+        f"{colors.yellow_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n"
+    )
 
     device_str = ""
     if device is not None:
@@ -510,18 +504,20 @@ async def main() -> None:
     hostname_str = f"{colors.okblue}Hostname:{colors.endc} {system_info['hostname']}"
 
     uptime_str = f"{colors.okblue}Uptime:{colors.endc} {system_info['uptime']}"
-    logged_str = f"{colors.okblue}Users logged in:{colors.endc} {system_info['logged_in_users']}"
+    logged_str = (
+        f"{colors.okblue}Users logged in:{colors.endc} {system_info['logged_in_users']}"
+    )
 
     cpu_str = f"{colors.okblue}CPU:{colors.endc} {system_info['cpu_model']} ({system_info['cpu_count']}c, {system_info['cpu_threads']}t)"
     load_str = f"{colors.okblue}System load:{colors.endc} {system_info['system_load']}"
 
-    memory_str = (
-        f"{colors.okblue}Memory:{colors.endc} {system_info['memory_usage']} of {system_info['total_memory']} used"
-    )
+    memory_str = f"{colors.okblue}Memory:{colors.endc} {system_info['memory_usage']} of {system_info['total_memory']} used"
 
     swap_str = ""
     if system_info["swap_usage"] is not None:
-        swap_str = f"{colors.okblue}Swap usage:{colors.endc} {system_info['swap_usage']}"
+        swap_str = (
+            f"{colors.okblue}Swap usage:{colors.endc} {system_info['swap_usage']}"
+        )
 
     collumns = max(len(device_str), len(uptime_str), len(cpu_str), len(memory_str))
 
@@ -551,7 +547,7 @@ async def main() -> None:
     for netname, ip in system_info["net_ifs"].items():
         if splitter:
             seperator(last, collumns)
-        last = f'{colors.okblue}{netname}:{colors.endc} {ip}'
+        last = f"{colors.okblue}{netname}:{colors.endc} {ip}"
         print(last, end="")
         if splitter:
             print()
@@ -559,25 +555,35 @@ async def main() -> None:
     if splitter:
         print()
 
-
     updates_available = None
     devel_updates_available = None
     updates_available = await updates_task
     devel_updates_available = await devel_updates_task
     if updates_available is not None:
         if isinstance(updates_available, str):
-            print(f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}", end="")
+            print(
+                f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}", end=""
+            )
         if isinstance(devel_updates_available, str):
-            print(f"\n{colors.bold}{colors.red_t}{devel_updates_available}{colors.endc}", end="")
+            print(
+                f"\n{colors.bold}{colors.red_t}{devel_updates_available}{colors.endc}",
+                end="",
+            )
         uisn = isinstance(updates_available, int)
         disn = isinstance(devel_updates_available, int)
         if updates_available and uisn:
             if devel_updates_available and disn:
-                print(f"\n{colors.bold}{colors.cyan_t}{updates_available+devel_updates_available} packages can be upgraded, of which {devel_updates_available} are development packages.{colors.endc}")
+                print(
+                    f"\n{colors.bold}{colors.cyan_t}{updates_available+devel_updates_available} packages can be upgraded, of which {devel_updates_available} are development packages.{colors.endc}"
+                )
             else:
-                print(f"\n{colors.bold}{colors.cyan_t}{updates_available} packages can be upgraded.{colors.endc}")
+                print(
+                    f"\n{colors.bold}{colors.cyan_t}{updates_available} packages can be upgraded.{colors.endc}"
+                )
         elif devel_updates_available and disn:
-            print(f"\n{colors.bold}{colors.cyan_t}{devel_updates_available} development packages can be upgraded.{colors.endc}")
+            print(
+                f"\n{colors.bold}{colors.cyan_t}{devel_updates_available} development packages can be upgraded.{colors.endc}"
+            )
         else:
             print(f"\n{colors.green_t}You are up to date!{colors.endc}")
     elif not hush_updates:
@@ -589,7 +595,8 @@ async def main() -> None:
     if not hush_news:
         print(news if news else "Failed to fetch news.")
 
-    os._exit(0) # Asyncio is horrible
+    os._exit(0)  # Asyncio is horrible
+
 
 if __name__ == "__main__":
     asyncio.run(main())
