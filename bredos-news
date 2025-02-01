@@ -6,8 +6,14 @@ hush_login_path = os.path.expanduser("~/.hush_login")
 if os.path.isfile(hush_login_path):
     exit(0)
 
+hush_news_path = os.path.expanduser("~/.hush_news")
+hush_updates_path = os.path.expanduser("~/.hush_updates")
+hush_news = os.path.isfile(hush_news_path)
+hush_updates = os.path.isfile(hush_updates_path)
+
 import asyncio, platform, psutil, aiohttp, subprocess, socket
 from datetime import datetime
+from time import monotonic
 
 sbc_list = [
     "ArmSoM AIM7 ",
@@ -109,7 +115,7 @@ sbc_list = [
 ]
 
 
-def hw_impl_id_to_vendor(impl_id):
+def hw_impl_id_to_vendor(impl_id: int) -> str:
     vendors = {
         0x41: "ARM",
         0x42: "Broadcom",
@@ -134,7 +140,7 @@ def hw_impl_id_to_vendor(impl_id):
     return vendors.get(impl_id, "Unknown")
 
 
-def arm_part_id_to_name(part_id):
+def arm_part_id_to_name(part_id: int) -> str:
     arm_parts = {
         0x810: "ARM810",
         0x920: "ARM920",
@@ -212,6 +218,14 @@ def arm_part_id_to_name(part_id):
     }
     return arm_parts.get(part_id, "Unknown")
 
+
+def get_active_ipv4_interfaces() -> dict:
+    active_interfaces = {}
+    for iface, addrs in psutil.net_if_addrs().items():
+        for addr in addrs:
+            if addr.family == socket.AF_INET and addr.address != '127.0.0.1':
+                active_interfaces[iface] = addr.address
+    return active_interfaces
 
 async def get_system_info() -> dict:
     hostname = platform.node()
@@ -334,7 +348,7 @@ async def get_system_info() -> dict:
     #        )
     #    except:
     #        ip_address = "Not found"
-    ip_address = "idk man"
+    net_ifs = get_active_ipv4_interfaces()
 
     return {
         "system_load": load_avg,
@@ -349,50 +363,59 @@ async def get_system_info() -> dict:
         "disk_usage": f"{usage_percent:.1f}% of {total_space:.2f}GB",
         "logged_in_users": logged_in_users,
         "memory_usage": f"{mem_usage_percent:.1f}%",
-        "ipv4_address": ip_address,
+        "net_ifs": net_ifs,
         "swap_usage": f"{swap_usage_percent:.1f}%" if swap_usage_percent is not None else None,
     }
 
 
-async def get_disks() -> dict:
-    pass
-
-
-async def get_net_ifs() -> dict:
-    pass
-
-
 async def get_updates():
+    if hush_updates:
+        return
     try:
         process = await asyncio.create_subprocess_exec(
             "checkupdates",
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
-        stdout, _ = await process.communicate()
-        updates = stdout.decode().strip().split("\n")
+        future = asyncio.ensure_future(process.communicate())
+        done, pending = await asyncio.wait([future], timeout=1.5)
+        if pending:
+            if p.returncode is None:
+                try:
+                    p.kill()
+                except ProcessLookupError:
+                    pass
+        stdout, _ = await future
+        if pending:
+            return
+        updates = stdout.decode()[:-1].split("\n")
         while "" in updates:
             updates.remove("")
         return len(updates) if updates else 0
     except FileNotFoundError:
         return "Install `pacman-contrib` to view available updates during login."
     except:
-        return None
+        return
 
 
 async def get_devel_updates():
+    if hush_updates:
+        return
     try:
-        await asyncio.create_subprocess_exec(
-            "yay", "--version",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-        )
         process = await asyncio.create_subprocess_exec(
             "yay", "-Qua", "--devel",
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
-        stdout, _ = await process.communicate()
+        future = asyncio.ensure_future(process.communicate())
+        done, pending = await asyncio.wait([future], timeout=1.5)
+        if pending:
+            if p.returncode is None:
+                try:
+                    p.kill()
+                except ProcessLookupError:
+                    pass
+        stdout, _ = await future
         updates = stdout.decode()[:-1].split("\n")
         while "" in updates:
             updates.remove("")
@@ -407,7 +430,7 @@ async def fetch_news():
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                "https://raw.githubusercontent.com/BredOS/news/refs/heads/main/notice.txt", timeout=1
+                "https://raw.githubusercontent.com/BredOS/news/refs/heads/main/notice.txt", timeout=2
             ) as response:
                 response.raise_for_status()
                 return await response.text()
@@ -520,16 +543,27 @@ async def main() -> None:
     if swap_str:
         seperator(memory_str, collumns)
     print(swap_str)
-    print(f"{colors.okblue}Usage of /:{colors.endc} {system_info['disk_usage']}")
+
+    usage_str = f"{colors.okblue}Usage of /:{colors.endc} {system_info['disk_usage']}"
+    print(usage_str, end="")
+    splitter = True
+    last = usage_str
+    for netname, ip in system_info["net_ifs"].items():
+        if splitter:
+            seperator(last, collumns)
+        last = f'{colors.okblue}{netname}:{colors.endc} {ip}'
+        print(last, end="")
+        if splitter:
+            print()
+        splitter = not splitter
+    if splitter:
+        print()
+
 
     updates_available = None
     devel_updates_available = None
-    try:
-        async with asyncio.timeout(4):
-            updates_available = await updates_task
-            devel_updates_available = await devel_updates_task
-    except asyncio.TimeoutError:
-        pass
+    updates_available = await updates_task
+    devel_updates_available = await devel_updates_task
     if updates_available is not None:
         if isinstance(updates_available, str):
             print(f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}", end="")
@@ -546,20 +580,16 @@ async def main() -> None:
             print(f"\n{colors.bold}{colors.cyan_t}{devel_updates_available} development packages can be upgraded.{colors.endc}")
         else:
             print(f"\n{colors.green_t}You are up to date!{colors.endc}")
-    else:
+    elif not hush_updates:
         print("\nTimed out waiting for updates.")
 
     print()
 
-    news = None
-    try:
-        async with asyncio.timeout(2):
-            news = await news_task
-    except asyncio.TimeoutError:
-        pass
-    print(news if news else "Failed to fetch news.")
+    news = await news_task
+    if not hush_news:
+        print(news if news else "Failed to fetch news.")
 
-    os._exit(0) # Fuck you asyncio
+    os._exit(0) # Asyncio is horrible
 
 if __name__ == "__main__":
     asyncio.run(main())

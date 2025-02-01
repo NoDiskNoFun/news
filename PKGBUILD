@@ -1,7 +1,7 @@
 # Maintainer: Bill Sideris <bill88t@bredos.org>
 
 pkgname=bredos-news
-pkgver=1.1.1
+pkgver=1.2.0
 pkgrel=1
 pkgdesc='BredOS news and system information utillity'
 arch=(any)
@@ -13,7 +13,7 @@ optdepends=('pacman-contrib: Show updatable packages' 'yay: Check for updatable 
 
 source=('99-bredos-news.sh' 'bredos-news')
 sha256sums=('5dfa12531be0c234337321fb1f77a2569390f400c63888b02b45f1acbbf9f7e3'
-            '806bf205db1d91ae4c8bfeecd971fa1ff3ac0ced0a83b145c20fc1accef0f74a')
+            '22d8301feaa39970f400777fe23640b59a3220096d1cbf97b8618477053f7edc')
 
 package() {
     mkdir -p "${pkgdir}/usr/bin" "${pkgdir}/etc/profile.d"

@@ -1,2 +1,2 @@
 # news
-BredOS news and system information utillity
+BredOS news and system information utility
