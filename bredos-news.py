@@ -12,7 +12,7 @@ hush_updates_path = os.path.expanduser("~/.hush_updates")
 hush_news = os.path.isfile(hush_news_path)
 hush_updates = os.path.isfile(hush_updates_path)
 
-import asyncio, platform, psutil, aiohttp, subprocess, socket
+import asyncio, platform, psutil, aiohttp, socket
 from datetime import datetime
 from time import monotonic
 
@@ -594,8 +594,6 @@ async def main() -> None:
     news = await news_task
     if not hush_news:
         print(news if news else "Failed to fetch news.")
-
-    os._exit(0)  # Asyncio is horrible
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ optdepends=('pacman-contrib: Show updatable packages' 'yay: Check for updatable 
 
 source=('99-bredos-news.sh' 'bredos-news.py')
 sha256sums=('5dfa12531be0c234337321fb1f77a2569390f400c63888b02b45f1acbbf9f7e3'
-            '59ef06c63f0566b82e8d76c48e33c7dd967a0fdb4ca80bb1e4f8cc88d9f47dfc')
+            '67538deafc276e8e0d2a19cd13469d1436721d395cd5cb6bcc6d5bfd2ac75734')
 
 package() {
     mkdir -p "${pkgdir}/usr/bin" "${pkgdir}/etc/profile.d"
