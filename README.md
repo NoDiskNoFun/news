@@ -1,5 +1,5 @@
-# news
-BredOS news and system information utility
+# BredOS News
+BredOS News and system information utility
 
 Displays system information, available updates *(including -git packages)* and news pushed to this repository by the BredOS team.<br />
 <br />
