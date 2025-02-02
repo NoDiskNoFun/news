@@ -224,7 +224,11 @@ def get_active_ipv4_interfaces() -> dict:
     active_interfaces = {}
     for iface, addrs in psutil.net_if_addrs().items():
         for addr in addrs:
-            if addr.family == socket.AF_INET and addr.address != "127.0.0.1":
+            if (
+                addr.family == socket.AF_INET
+                and addr.address != "127.0.0.1"
+                and not iface.startswith(("br-", "docker", "virbr"))
+            ):
                 active_interfaces[iface] = addr.address
     return active_interfaces
 
