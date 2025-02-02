@@ -12,9 +12,9 @@ hush_updates_path = os.path.expanduser("~/.hush_updates")
 hush_news = os.path.isfile(hush_news_path)
 hush_updates = os.path.isfile(hush_updates_path)
 
-import asyncio, platform, psutil, aiohttp, socket
-from datetime import datetime
-from time import monotonic
+import asyncio, platform, psutil, aiohttp, socket, json
+from datetime import datetime, timedelta
+from time import monotonic, time
 
 sbc_list = [
     "ArmSoM AIM7 ",
@@ -474,11 +474,50 @@ class colors:
     uninverse = "\033[27m"
 
 
+def cache_gen(update_str: str, news_str: str):
+    data = {"timestamp": time(), "updates": update_str, "news": news_str}
+    with open("/tmp/bredos-news.tmp", "w") as f:
+        json.dump(data, f)
+
+
+def fetch_cache():
+    if not os.path.exists("/tmp/bredos-news.tmp"):
+        return None
+
+    with open("/tmp/bredos-news.tmp") as f:
+        data = json.load(f)
+
+    timestamp = data.get("timestamp")
+    if timestamp is None:
+        return None
+
+    if datetime.now() - datetime.fromtimestamp(timestamp) <= timedelta(minutes=60):
+        return data.get("updates"), data.get("news")
+
+    return None
+
+
 async def main() -> None:
-    updates_task = get_updates()
-    devel_updates_task = get_devel_updates()
-    news_task = fetch_news()
     info_task = get_system_info()
+
+    devel_updates_task = None
+    news_task = None
+    updates_available = None
+    devel_updates_available = None
+    upd_str = None
+    news = None
+
+    cache_data = fetch_cache()
+    if cache_data:
+        upd_str = cache_data[0]
+        news = cache_data[1]
+
+    if not (hush_updates or upd_str):
+        updates_task = get_updates()
+        devel_updates_task = get_devel_updates()
+
+    if not news:
+        news_task = fetch_news()
 
     device = None
     sbc_declared = detect_install_device()
@@ -555,45 +594,55 @@ async def main() -> None:
     if splitter:
         print()
 
-    updates_available = None
-    devel_updates_available = None
-    updates_available = await updates_task
-    devel_updates_available = await devel_updates_task
-    if updates_available is not None:
-        if isinstance(updates_available, str):
-            print(
-                f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}", end=""
-            )
-        if isinstance(devel_updates_available, str):
-            print(
-                f"\n{colors.bold}{colors.red_t}{devel_updates_available}{colors.endc}",
-                end="",
-            )
-        uisn = isinstance(updates_available, int)
-        disn = isinstance(devel_updates_available, int)
-        if updates_available and uisn:
-            if devel_updates_available and disn:
-                print(
-                    f"\n{colors.bold}{colors.cyan_t}{updates_available+devel_updates_available} packages can be upgraded, of which {devel_updates_available} are development packages.{colors.endc}"
-                )
-            else:
-                print(
-                    f"\n{colors.bold}{colors.cyan_t}{updates_available} packages can be upgraded.{colors.endc}"
-                )
-        elif devel_updates_available and disn:
-            print(
-                f"\n{colors.bold}{colors.cyan_t}{devel_updates_available} development packages can be upgraded.{colors.endc}"
-            )
-        else:
-            print(f"\n{colors.green_t}You are up to date!{colors.endc}")
-    elif not hush_updates:
-        print("\nTimed out waiting for updates.")
+    if not hush_updates:
+        if not cache_data:
+            updates_available = await updates_task
+            devel_updates_available = await devel_updates_task
+
+        if not upd_str:
+            if updates_available is not None:
+                if isinstance(updates_available, str):
+                    upd_str = (
+                        f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}"
+                    )
+                if isinstance(devel_updates_available, str):
+                    upd_str = f"\n{colors.bold}{colors.red_t}{devel_updates_available}{colors.endc}"
+                uisn = isinstance(updates_available, int)
+                disn = isinstance(devel_updates_available, int)
+                if updates_available and uisn:
+                    if devel_updates_available and disn:
+                        upd_str = f"\n{colors.bold}{colors.cyan_t}{updates_available+devel_updates_available} packages can be upgraded, of which {devel_updates_available} are development packages.{colors.endc}\n"
+                    else:
+                        upd_str = f"\n{colors.bold}{colors.cyan_t}{updates_available} packages can be upgraded.{colors.endc}\n"
+                elif devel_updates_available and disn:
+                    upd_str = f"\n{colors.bold}{colors.cyan_t}{devel_updates_available} development packages can be upgraded.{colors.endc}\n"
+                else:
+                    upd_str = f"\n{colors.green_t}You are up to date!{colors.endc}\n"
+            elif not hush_updates:
+                print("\nTimed out waiting for updates.")
+
+        if upd_str:
+            print(upd_str, end="")
 
     print()
 
-    news = await news_task
     if not hush_news:
+        if not news:
+            news = await news_task
+
         print(news if news else "Failed to fetch news.")
+
+    if not cache_data:
+        if not news:
+            news = ""
+        if not upd_str:
+            upd_str = ""
+        if (
+            (not cache_data)
+            or (upd_str and not cache_data[0])
+            or (news and not cache_data[1])
+        ):
+            cache_gen(upd_str, news)
 
 
 if __name__ == "__main__":
