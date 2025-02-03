@@ -479,16 +479,16 @@ class colors:
 
 
 def cache_gen(update_str: str, news_str: str):
-    data = {"timestamp": time(), "updates": update_str, "news": news_str}
-    with open("/tmp/bredos-news.tmp", "w") as f:
+    data = {"timestamp": int(time()), "updates": update_str, "news": news_str}
+    with open("/tmp/bredos-news." + str(os.geteuid()) + ".tmp", "w") as f:
         json.dump(data, f)
 
 
 def fetch_cache():
-    if not os.path.exists("/tmp/bredos-news.tmp"):
+    if not os.path.exists("/tmp/bredos-news." + str(os.geteuid()) + ".tmp"):
         return None
 
-    with open("/tmp/bredos-news.tmp") as f:
+    with open("/tmp/bredos-news." + str(os.geteuid()) + ".tmp") as f:
         data = json.load(f)
 
     timestamp = data.get("timestamp")
@@ -599,11 +599,10 @@ async def main() -> None:
         print()
 
     if not hush_updates:
-        if not cache_data:
+        if not upd_str:
             updates_available = await updates_task
             devel_updates_available = await devel_updates_task
 
-        if not upd_str:
             if updates_available is not None:
                 if isinstance(updates_available, str):
                     upd_str = (
@@ -636,17 +635,17 @@ async def main() -> None:
 
         print(news if news else "Failed to fetch news.")
 
-    if not cache_data:
-        if not news:
-            news = ""
-        if not upd_str:
-            upd_str = ""
-        if (
-            (not cache_data)
-            or (upd_str and not cache_data[0])
-            or (news and not cache_data[1])
-        ):
-            cache_gen(upd_str, news)
+    if not news:
+        news = ""
+    if not upd_str:
+        upd_str = ""
+
+    if (
+        (not cache_data)
+        or (upd_str and not cache_data[0])
+        or (news and not cache_data[1])
+    ):
+        cache_gen(upd_str, news)
 
 
 if __name__ == "__main__":
