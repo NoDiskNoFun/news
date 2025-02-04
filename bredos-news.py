@@ -647,6 +647,12 @@ async def main() -> None:
     ):
         cache_gen(upd_str, news)
 
+    # Clean current line
+    print("\r\033[K", end="")
+
+    # Just quit hard, asyncio is horrible
+    os._exit(0)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

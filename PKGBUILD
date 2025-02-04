@@ -1,7 +1,7 @@
 # Maintainer: Bill Sideris <bill88t@bredos.org>
 
 pkgname=bredos-news
-pkgver=1.2.5
+pkgver=1.2.6
 pkgrel=1
 pkgdesc='BredOS news and system information utility'
 arch=(any)
@@ -13,7 +13,7 @@ optdepends=('pacman-contrib: Show updatable packages' 'yay: Check for updatable 
 
 source=('99-bredos-news.sh' 'bredos-news.py' 'cleanup-bredos-news.hook')
 sha256sums=('5dfa12531be0c234337321fb1f77a2569390f400c63888b02b45f1acbbf9f7e3'
-            '8e1372ab94b505f457673e5cdec669ec755c782d1fbc2f9f5888c4aca0eadda8'
+            '49be9b40b584dc87bb9bf6b8f3fa46487912d400787ba4b70167e1fa5403d0b4'
             'b57a96cb472b440a0500680552845b04443578265ceb1ed7dba2ff8f86b66b33')
 
 package() {
