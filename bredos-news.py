@@ -1,10 +1,10 @@
 #!/usr/bin/python3
 
-from sys import exit
+from sys import exit, stdin
 import os
 
 hush_login_path = os.path.expanduser("~/.hush_login")
-if os.path.isfile(hush_login_path):
+if os.path.isfile(hush_login_path) or not stdin.isatty():
     exit(0)
 
 hush_news_path = os.path.expanduser("~/.hush_news")
