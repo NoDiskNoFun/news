@@ -12,9 +12,19 @@ hush_updates_path = os.path.expanduser("~/.hush_updates")
 hush_news = os.path.isfile(hush_news_path)
 hush_updates = os.path.isfile(hush_updates_path)
 
-import asyncio, platform, psutil, aiohttp, socket, json
+import asyncio, platform, psutil, aiohttp, socket, json, signal
 from datetime import datetime, timedelta
 from time import monotonic, time
+
+
+def handle_exit(signum, frame):
+    # Clear current line for shell line
+    print("\r\033[K", end="")
+    os._exit(0)
+
+
+# Register signal handlers for SIGINT (Ctrl+C)
+signal.signal(signal.SIGINT, handle_exit)
 
 sbc_list = [
     "ArmSoM AIM7 ",
