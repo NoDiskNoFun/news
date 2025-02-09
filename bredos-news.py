@@ -1,20 +1,24 @@
 #!/usr/bin/python3
+try:
+    from sys import exit, stdin
+    import os
 
-from sys import exit, stdin
-import os
+    hush_login_path = os.path.expanduser("~/.hush_login")
+    if os.path.isfile(hush_login_path) or not stdin.isatty():
+        exit(0)
 
-hush_login_path = os.path.expanduser("~/.hush_login")
-if os.path.isfile(hush_login_path) or not stdin.isatty():
-    exit(0)
+    hush_news_path = os.path.expanduser("~/.hush_news")
+    hush_updates_path = os.path.expanduser("~/.hush_updates")
+    hush_news = os.path.isfile(hush_news_path)
+    hush_updates = os.path.isfile(hush_updates_path)
 
-hush_news_path = os.path.expanduser("~/.hush_news")
-hush_updates_path = os.path.expanduser("~/.hush_updates")
-hush_news = os.path.isfile(hush_news_path)
-hush_updates = os.path.isfile(hush_updates_path)
+    import asyncio, platform, psutil, aiohttp, socket, json, signal
+    from datetime import datetime, timedelta
+    from time import monotonic, time
+except KeyboardInterrupt:
+    import os
 
-import asyncio, platform, psutil, aiohttp, socket, json, signal
-from datetime import datetime, timedelta
-from time import monotonic, time
+    os._exit(0)
 
 
 def handle_exit(signum, frame):
