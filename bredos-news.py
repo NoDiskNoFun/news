@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 try:
-    from sys import exit, stdin
+    from sys import exit, stdin, stdout
     import os
 
     hush_login_path = os.path.expanduser("~/.hush_login")
@@ -21,9 +21,13 @@ except KeyboardInterrupt:
     os._exit(0)
 
 
+def lc() -> None:
+    print("\r\033[K", end="")
+
+
 def handle_exit(signum, frame):
     # Clear current line for shell line
-    print("\r\033[K", end="")
+    lc()
     os._exit(0)
 
 
@@ -384,7 +388,7 @@ async def get_updates():
         )
 
         try:
-            stdout, _ = await asyncio.wait_for(process.communicate(), timeout=5)
+            stdout, _ = await asyncio.wait_for(process.communicate(), timeout=8)
         except asyncio.TimeoutError:
             process.kill()
             return
@@ -414,7 +418,7 @@ async def get_devel_updates():
         )
 
         try:
-            stdout, _ = await asyncio.wait_for(process.communicate(), timeout=5)
+            stdout, _ = await asyncio.wait_for(process.communicate(), timeout=8)
         except asyncio.TimeoutError:
             process.kill()
             return
@@ -509,7 +513,7 @@ def fetch_cache():
     if timestamp is None:
         return None
 
-    if datetime.now() - datetime.fromtimestamp(timestamp) <= timedelta(minutes=60):
+    if datetime.now() - datetime.fromtimestamp(timestamp) <= timedelta(hours=6):
         return data.get("updates"), data.get("news")
 
     return None
@@ -614,8 +618,11 @@ async def main() -> None:
 
     if not hush_updates:
         if not upd_str:
+            print("Checking for updates.. (Skip with Ctrl+C)", end="")
+            stdout.flush()
             updates_available = await updates_task
             devel_updates_available = await devel_updates_task
+            lc()
 
             if updates_available is not None:
                 if isinstance(updates_available, str):
@@ -645,7 +652,10 @@ async def main() -> None:
 
     if not hush_news:
         if not news:
+            print("Fetching news.. (Skip with Ctrl+C)", end="")
+            stdout.flush()
             news = await news_task
+            lc()
 
         print(news if news else "Failed to fetch news.")
 
@@ -662,7 +672,7 @@ async def main() -> None:
         cache_gen(upd_str, news)
 
     # Clean current line
-    print("\r\033[K", end="")
+    lc()
 
     # Just quit hard, asyncio is horrible
     os._exit(0)
