@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 try:
-    from sys import exit, stdin, stdout
+    from sys import exit, stdin, stdout, argv
     import os
 
     hush_login_path = os.path.expanduser("~/.hush_login")
@@ -13,6 +13,7 @@ try:
     hush_updates = os.path.isfile(hush_updates_path)
 
     import asyncio, platform, psutil, aiohttp, socket, json, signal
+    from pathlib import Path
     from datetime import datetime, timedelta
     from time import monotonic, time
 except KeyboardInterrupt:
@@ -520,162 +521,179 @@ def fetch_cache():
 
 
 async def main() -> None:
-    info_task = get_system_info()
+    args = set(argv[1:])
+    if "--help" in args or "-h" in args:
+        print("Wow..")
+    elif "--clear" in args or "-c" in args:
+        for file in Path("/tmp").glob("bredos-news*"):
+            if file.is_file():
+                file.unlink()
+    else:
+        silent = "--silent" in args or "-s" in args
+        info_task = get_system_info()
 
-    devel_updates_task = None
-    news_task = None
-    updates_available = None
-    devel_updates_available = None
-    upd_str = None
-    news = None
+        devel_updates_task = None
+        news_task = None
+        updates_available = None
+        devel_updates_available = None
+        upd_str = None
+        news = None
 
-    cache_data = fetch_cache()
-    if cache_data:
-        upd_str = cache_data[0]
-        news = cache_data[1]
+        cache_data = fetch_cache()
+        if cache_data:
+            upd_str = cache_data[0]
+            news = cache_data[1]
 
-    if not (hush_updates or upd_str):
-        updates_task = get_updates()
-        devel_updates_task = get_devel_updates()
+        if not (hush_updates or upd_str):
+            updates_task = get_updates()
+            devel_updates_task = get_devel_updates()
 
-    if not news:
-        news_task = fetch_news()
+        if not news:
+            news_task = fetch_news()
 
-    device = None
-    sbc_declared = detect_install_device()
-    if sbc_declared in sbc_list:
-        device = sbc_declared
+        device = None
+        sbc_declared = detect_install_device()
+        if sbc_declared in sbc_list:
+            device = sbc_declared
 
-    system_info = await info_task
+        system_info = await info_task
 
-    print(
-        f"{colors.yellow_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})"
-    )
-    print(
-        f"{colors.yellow_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/"
-    )
-    print(
-        f"{colors.yellow_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n"
-    )
+        if not silent:
+            print(
+                f"{colors.yellow_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})"
+            )
+            print(
+                f"{colors.yellow_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/"
+            )
+            print(
+                f"{colors.yellow_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n"
+            )
 
-    device_str = ""
-    if device is not None:
-        device_str += f"{colors.okblue}Device:{colors.endc} {device}"
+        device_str = ""
+        if device is not None:
+            device_str += f"{colors.okblue}Device:{colors.endc} {device}"
 
-    hostname_str = f"{colors.okblue}Hostname:{colors.endc} {system_info['hostname']}"
+        hostname_str = f"{colors.okblue}Hostname:{colors.endc} {system_info['hostname']}"
 
-    uptime_str = f"{colors.okblue}Uptime:{colors.endc} {system_info['uptime']}"
-    logged_str = (
-        f"{colors.okblue}Users logged in:{colors.endc} {system_info['logged_in_users']}"
-    )
-
-    cpu_str = f"{colors.okblue}CPU:{colors.endc} {system_info['cpu_model']} ({system_info['cpu_count']}c, {system_info['cpu_threads']}t)"
-    load_str = f"{colors.okblue}System load:{colors.endc} {system_info['system_load']}"
-
-    memory_str = f"{colors.okblue}Memory:{colors.endc} {system_info['memory_usage']} of {system_info['total_memory']} used"
-
-    swap_str = ""
-    if system_info["swap_usage"] is not None:
-        swap_str = (
-            f"{colors.okblue}Swap usage:{colors.endc} {system_info['swap_usage']}"
+        uptime_str = f"{colors.okblue}Uptime:{colors.endc} {system_info['uptime']}"
+        logged_str = (
+            f"{colors.okblue}Users logged in:{colors.endc} {system_info['logged_in_users']}"
         )
 
-    collumns = max(len(device_str), len(uptime_str), len(cpu_str), len(memory_str))
+        cpu_str = f"{colors.okblue}CPU:{colors.endc} {system_info['cpu_model']} ({system_info['cpu_count']}c, {system_info['cpu_threads']}t)"
+        load_str = f"{colors.okblue}System load:{colors.endc} {system_info['system_load']}"
 
-    print(device_str, end="")
-    if device_str:
-        seperator(device_str, collumns)
-    print(hostname_str)
+        memory_str = f"{colors.okblue}Memory:{colors.endc} {system_info['memory_usage']} of {system_info['total_memory']} used"
 
-    print(uptime_str, end="")
-    seperator(uptime_str, collumns)
-    print(logged_str)
+        swap_str = ""
+        if system_info["swap_usage"] is not None:
+            swap_str = (
+                f"{colors.okblue}Swap usage:{colors.endc} {system_info['swap_usage']}"
+            )
 
-    print(cpu_str, end="")
-    seperator(cpu_str, collumns)
-    print(load_str)
+        collumns = max(len(device_str), len(uptime_str), len(cpu_str), len(memory_str))
 
-    print(memory_str, end="")
+        if not silent:
+            print(device_str, end="")
+            if device_str:
+                seperator(device_str, collumns)
+            print(hostname_str)
 
-    if swap_str:
-        seperator(memory_str, collumns)
-    print(swap_str)
+            print(uptime_str, end="")
+            seperator(uptime_str, collumns)
+            print(logged_str)
 
-    usage_str = f"{colors.okblue}Usage of /:{colors.endc} {system_info['disk_usage']}"
-    print(usage_str, end="")
-    splitter = True
-    last = usage_str
-    for netname, ip in system_info["net_ifs"].items():
-        if splitter:
-            seperator(last, collumns)
-        last = f"{colors.okblue}{netname}:{colors.endc} {ip}"
-        print(last, end="")
-        if splitter:
-            print()
-        splitter = not splitter
-    if splitter:
-        print()
+            print(cpu_str, end="")
+            seperator(cpu_str, collumns)
+            print(load_str)
 
-    if not hush_updates:
-        if not upd_str:
-            print("Checking for updates.. (Skip with Ctrl+C)", end="")
-            stdout.flush()
-            updates_available = await updates_task
-            devel_updates_available = await devel_updates_task
-            lc()
+            print(memory_str, end="")
 
-            if updates_available is not None:
-                if isinstance(updates_available, str):
-                    upd_str = (
-                        f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}"
-                    )
-                if isinstance(devel_updates_available, str):
-                    upd_str = f"\n{colors.bold}{colors.red_t}{devel_updates_available}{colors.endc}"
-                uisn = isinstance(updates_available, int)
-                disn = isinstance(devel_updates_available, int)
-                if updates_available and uisn:
-                    if devel_updates_available and disn:
-                        upd_str = f"\n{colors.bold}{colors.cyan_t}{updates_available+devel_updates_available} packages can be upgraded, of which {devel_updates_available} are development packages.{colors.endc}\n"
+            if swap_str:
+                seperator(memory_str, collumns)
+            print(swap_str)
+
+            usage_str = f"{colors.okblue}Usage of /:{colors.endc} {system_info['disk_usage']}"
+            print(usage_str, end="")
+            splitter = True
+            last = usage_str
+            for netname, ip in system_info["net_ifs"].items():
+                if splitter:
+                    seperator(last, collumns)
+                last = f"{colors.okblue}{netname}:{colors.endc} {ip}"
+                print(last, end="")
+                if splitter:
+                    print()
+                splitter = not splitter
+            if splitter:
+                print()
+
+        if not hush_updates:
+            if not upd_str:
+                if not silent:
+                    print("Checking for updates.. (Skip with Ctrl+C)", end="")
+                    stdout.flush()
+                updates_available = await updates_task
+                devel_updates_available = await devel_updates_task
+                if not silent:
+                    lc()
+
+                if updates_available is not None:
+                    if isinstance(updates_available, str):
+                        upd_str = (
+                            f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}"
+                        )
+                    if isinstance(devel_updates_available, str):
+                        upd_str = f"\n{colors.bold}{colors.red_t}{devel_updates_available}{colors.endc}"
+                    uisn = isinstance(updates_available, int)
+                    disn = isinstance(devel_updates_available, int)
+                    if updates_available and uisn:
+                        if devel_updates_available and disn:
+                            upd_str = f"\n{colors.bold}{colors.cyan_t}{updates_available+devel_updates_available} packages can be upgraded, of which {devel_updates_available} are development packages.{colors.endc}\n"
+                        else:
+                            upd_str = f"\n{colors.bold}{colors.cyan_t}{updates_available} packages can be upgraded.{colors.endc}\n"
+                    elif devel_updates_available and disn:
+                        upd_str = f"\n{colors.bold}{colors.cyan_t}{devel_updates_available} development packages can be upgraded.{colors.endc}\n"
                     else:
-                        upd_str = f"\n{colors.bold}{colors.cyan_t}{updates_available} packages can be upgraded.{colors.endc}\n"
-                elif devel_updates_available and disn:
-                    upd_str = f"\n{colors.bold}{colors.cyan_t}{devel_updates_available} development packages can be upgraded.{colors.endc}\n"
-                else:
-                    upd_str = f"\n{colors.green_t}You are up to date!{colors.endc}\n"
-            elif not hush_updates:
-                print("\nTimed out waiting for updates.")
+                        upd_str = f"\n{colors.green_t}You are up to date!{colors.endc}\n"
+                elif (not hush_updates) and not silent:
+                    print("\nTimed out waiting for updates.")
 
-        if upd_str:
-            print(upd_str, end="")
+            if upd_str and not silent:
+                    print(upd_str, end="")
 
-    print()
+        if not silent:
+            print()
 
-    if not hush_news:
+        if not hush_news:
+            if not news:
+                if not silent:
+                    print("Fetching news.. (Skip with Ctrl+C)", end="")
+                    stdout.flush()
+                news = await news_task
+                if not silent:
+                    lc()
+
+            if not silent:
+                print(news if news else "Failed to fetch news.")
+
         if not news:
-            print("Fetching news.. (Skip with Ctrl+C)", end="")
-            stdout.flush()
-            news = await news_task
-            lc()
+            news = ""
+        if not upd_str:
+            upd_str = ""
 
-        print(news if news else "Failed to fetch news.")
+        if (
+            (not cache_data)
+            or (upd_str and not cache_data[0])
+            or (news and not cache_data[1])
+        ):
+            cache_gen(upd_str, news)
 
-    if not news:
-        news = ""
-    if not upd_str:
-        upd_str = ""
+        # Clean current line
+        lc()
 
-    if (
-        (not cache_data)
-        or (upd_str and not cache_data[0])
-        or (news and not cache_data[1])
-    ):
-        cache_gen(upd_str, news)
-
-    # Clean current line
-    lc()
-
-    # Just quit hard, asyncio is horrible
-    os._exit(0)
+        # Just quit hard, asyncio is horrible
+        os._exit(0)
 
 
 if __name__ == "__main__":
