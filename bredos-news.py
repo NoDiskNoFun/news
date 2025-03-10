@@ -497,6 +497,9 @@ class colors:
     uninverse = "\033[27m"
 
 
+clear_seq = "\x1b[2J\x1b[3J\x1b[H"
+
+
 def cache_gen(update_str: str, news_str: str):
     data = {"timestamp": int(time()), "updates": update_str, "news": news_str}
     with open("/tmp/bredos-news." + str(os.geteuid()) + ".tmp", "w") as f:
@@ -560,7 +563,7 @@ async def main() -> None:
 
         if not silent:
             print(
-                f"{colors.yellow_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})"
+                f"{clear_seq}{colors.yellow_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})"
             )
             print(
                 f"{colors.yellow_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/"
@@ -573,15 +576,17 @@ async def main() -> None:
         if device is not None:
             device_str += f"{colors.okblue}Device:{colors.endc} {device}"
 
-        hostname_str = f"{colors.okblue}Hostname:{colors.endc} {system_info['hostname']}"
-
-        uptime_str = f"{colors.okblue}Uptime:{colors.endc} {system_info['uptime']}"
-        logged_str = (
-            f"{colors.okblue}Users logged in:{colors.endc} {system_info['logged_in_users']}"
+        hostname_str = (
+            f"{colors.okblue}Hostname:{colors.endc} {system_info['hostname']}"
         )
 
+        uptime_str = f"{colors.okblue}Uptime:{colors.endc} {system_info['uptime']}"
+        logged_str = f"{colors.okblue}Users logged in:{colors.endc} {system_info['logged_in_users']}"
+
         cpu_str = f"{colors.okblue}CPU:{colors.endc} {system_info['cpu_model']} ({system_info['cpu_count']}c, {system_info['cpu_threads']}t)"
-        load_str = f"{colors.okblue}System load:{colors.endc} {system_info['system_load']}"
+        load_str = (
+            f"{colors.okblue}System load:{colors.endc} {system_info['system_load']}"
+        )
 
         memory_str = f"{colors.okblue}Memory:{colors.endc} {system_info['memory_usage']} of {system_info['total_memory']} used"
 
@@ -613,7 +618,9 @@ async def main() -> None:
                 seperator(memory_str, collumns)
             print(swap_str)
 
-            usage_str = f"{colors.okblue}Usage of /:{colors.endc} {system_info['disk_usage']}"
+            usage_str = (
+                f"{colors.okblue}Usage of /:{colors.endc} {system_info['disk_usage']}"
+            )
             print(usage_str, end="")
             splitter = True
             last = usage_str
@@ -640,9 +647,7 @@ async def main() -> None:
 
                 if updates_available is not None:
                     if isinstance(updates_available, str):
-                        upd_str = (
-                            f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}"
-                        )
+                        upd_str = f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}"
                     if isinstance(devel_updates_available, str):
                         upd_str = f"\n{colors.bold}{colors.red_t}{devel_updates_available}{colors.endc}"
                     uisn = isinstance(updates_available, int)
@@ -655,12 +660,14 @@ async def main() -> None:
                     elif devel_updates_available and disn:
                         upd_str = f"\n{colors.bold}{colors.cyan_t}{devel_updates_available} development packages can be upgraded.{colors.endc}\n"
                     else:
-                        upd_str = f"\n{colors.green_t}You are up to date!{colors.endc}\n"
+                        upd_str = (
+                            f"\n{colors.green_t}You are up to date!{colors.endc}\n"
+                        )
                 elif (not hush_updates) and not silent:
                     print("\nTimed out waiting for updates.")
 
             if upd_str and not silent:
-                    print(upd_str, end="")
+                print(upd_str, end="")
 
         if not silent:
             print()
