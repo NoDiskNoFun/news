@@ -13,6 +13,7 @@ try:
     hush_updates = os.path.isfile(hush_updates_path)
 
     import asyncio, platform, psutil, aiohttp, socket, json, signal
+    from collections import Counter
     from pathlib import Path
     from datetime import datetime, timedelta
     from time import monotonic, time
@@ -377,6 +378,33 @@ async def get_system_info() -> dict:
     }
 
 
+async def get_service_statuses(command: str):
+    process = await asyncio.create_subprocess_shell(
+        command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    stdout, _ = await process.communicate()
+    statuses = [
+        line.strip()
+        for line in stdout.decode().strip().split("\n")
+        if line and line not in ["running", "exited", "dead"]
+    ]
+    return Counter(statuses)
+
+
+async def count_failed_systemd() -> dict:
+    system_statuses = await get_service_statuses(
+        "systemctl list-units --type=service --no-legend --no-pager | awk '{print $4}'"
+    )
+    user_statuses = await get_service_statuses(
+        "systemctl --user list-units --type=service --no-legend --no-pager | awk '{print $4}'"
+    )
+
+    total_statuses = system_statuses + user_statuses
+    total_count = sum(total_statuses.values())
+
+    return {"total": total_count, "breakdown": dict(total_statuses)}
+
+
 async def get_updates():
     if hush_updates:
         return  # Do not do anything
@@ -534,6 +562,7 @@ async def main() -> None:
     else:
         silent = "--silent" in args or "-s" in args
         info_task = get_system_info()
+        services_task = count_failed_systemd()
 
         devel_updates_task = None
         news_task = None
@@ -695,6 +724,24 @@ async def main() -> None:
             or (news and not cache_data[1])
         ):
             cache_gen(upd_str, news)
+
+        services = await services_task
+        if not silent:
+            if not services["total"]:
+                print(
+                    f"{colors.bold}{colors.green_t}System is operating normally.{colors.endc}"
+                )
+            else:
+                for i in services["breakdown"].keys():
+                    n = services["breakdown"][i]
+                    if i == "failed":
+                        print(
+                            f"{colors.bold}{colors.red_t}{n}{colors.endc} services have {colors.bold}{colors.red_t}{i}{colors.endc}"
+                        )
+                    else:
+                        print(
+                            f'{colors.bold}{colors.yellow_t}{n}{colors.endc} services report status {colors.bold}{colors.yellow_t}"{i}"{colors.endc}'
+                        )
 
         # Clean current line
         lc()
