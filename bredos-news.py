@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+
 try:
     from sys import exit, stdin, stdout, argv
     import os
@@ -9,8 +10,8 @@ try:
 
     hush_news_path = os.path.expanduser("~/.hush_news")
     hush_updates_path = os.path.expanduser("~/.hush_updates")
-    hush_news = os.path.isfile(hush_news_path)
-    hush_updates = os.path.isfile(hush_updates_path)
+    hush_news = (not os.geteuid()) or os.path.isfile(hush_news_path)
+    hush_updates = (not os.geteuid()) or os.path.isfile(hush_updates_path)
 
     import asyncio, platform, psutil, aiohttp, socket, json, signal
     from collections import Counter
@@ -592,38 +593,32 @@ async def main() -> None:
 
         if not silent:
             print(
-                f"{clear_seq}{colors.yellow_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})"
+                f"{clear_seq}{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})"
             )
             print(
-                f"{colors.yellow_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/"
+                f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/"
             )
             print(
-                f"{colors.yellow_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n"
+                f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n"
             )
 
         device_str = ""
         if device is not None:
-            device_str += f"{colors.okblue}Device:{colors.endc} {device}"
+            device_str += f"{colors.okblue if os.geteuid() else colors.red_t}Device:{colors.endc} {device}"
 
-        hostname_str = (
-            f"{colors.okblue}Hostname:{colors.endc} {system_info['hostname']}"
-        )
+        hostname_str = f"{colors.okblue if os.geteuid() else colors.red_t}Hostname:{colors.endc} {system_info['hostname']}"
 
-        uptime_str = f"{colors.okblue}Uptime:{colors.endc} {system_info['uptime']}"
-        logged_str = f"{colors.okblue}Users logged in:{colors.endc} {system_info['logged_in_users']}"
+        uptime_str = f"{colors.okblue if os.geteuid() else colors.red_t}Uptime:{colors.endc} {system_info['uptime']}"
+        logged_str = f"{colors.okblue if os.geteuid() else colors.red_t}Users logged in:{colors.endc} {system_info['logged_in_users']}"
 
-        cpu_str = f"{colors.okblue}CPU:{colors.endc} {system_info['cpu_model']} ({system_info['cpu_count']}c, {system_info['cpu_threads']}t)"
-        load_str = (
-            f"{colors.okblue}System load:{colors.endc} {system_info['system_load']}"
-        )
+        cpu_str = f"{colors.okblue if os.geteuid() else colors.red_t}CPU:{colors.endc} {system_info['cpu_model']} ({system_info['cpu_count']}c, {system_info['cpu_threads']}t)"
+        load_str = f"{colors.okblue if os.geteuid() else colors.red_t}System load:{colors.endc} {system_info['system_load']}"
 
-        memory_str = f"{colors.okblue}Memory:{colors.endc} {system_info['memory_usage']} of {system_info['total_memory']} used"
+        memory_str = f"{colors.okblue if os.geteuid() else colors.red_t}Memory:{colors.endc} {system_info['memory_usage']} of {system_info['total_memory']} used"
 
         swap_str = ""
         if system_info["swap_usage"] is not None:
-            swap_str = (
-                f"{colors.okblue}Swap usage:{colors.endc} {system_info['swap_usage']}"
-            )
+            swap_str = f"{colors.okblue if os.geteuid() else colors.red_t}Swap usage:{colors.endc} {system_info['swap_usage']}"
 
         collumns = max(len(device_str), len(uptime_str), len(cpu_str), len(memory_str))
 
@@ -647,16 +642,14 @@ async def main() -> None:
                 seperator(memory_str, collumns)
             print(swap_str)
 
-            usage_str = (
-                f"{colors.okblue}Usage of /:{colors.endc} {system_info['disk_usage']}"
-            )
+            usage_str = f"{colors.okblue if os.geteuid() else colors.red_t}Usage of /:{colors.endc} {system_info['disk_usage']}"
             print(usage_str, end="")
             splitter = True
             last = usage_str
             for netname, ip in system_info["net_ifs"].items():
                 if splitter:
                     seperator(last, collumns)
-                last = f"{colors.okblue}{netname}:{colors.endc} {ip}"
+                last = f"{colors.okblue if os.geteuid() else colors.red_t}{netname}:{colors.endc} {ip}"
                 print(last, end="")
                 if splitter:
                     print()
@@ -701,7 +694,14 @@ async def main() -> None:
         if not silent:
             print()
 
-        if not hush_news:
+        if not os.geteuid():
+            print(
+                colors.red_t
+                + "You're running as ROOT! Be careful and good luck!"
+                + colors.endc
+                + "\n"
+            )
+        elif not hush_news:
             if not news:
                 if not silent:
                     print("Fetching news.. (Skip with Ctrl+C)", end="")
