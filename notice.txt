@@ -1,4 +1,7 @@
-Whoa, this is the first news message!
-You'll see important puns and announcements here.
+New additions to BredOS!
+Governor control, windows x86 apps, GRUB
+password protection and more now out!
 
-- bill88t
+https://wiki.bredos.org/en/blog/2025/05/07
+
+- bill88t, the Domesticated Federal Pancake.
