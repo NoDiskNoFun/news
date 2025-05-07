@@ -1,7 +1,7 @@
 New additions to BredOS!
-Governor control, windows x86 apps, GRUB
-password protection and more now out!
+Governor control, windows x86 apps, GRUB password
+protection and more now out!
 
-https://wiki.bredos.org/en/blog/2025/05/07
+More info: https://wiki.bredos.org/en/blog/2025/05/07
 
-- bill88t, the Domesticated Federal Pancake.
+- bill88t, the Domesticated Federal Pancake
