@@ -1,6 +1,6 @@
 New additions to BredOS!
 Governor control, windows x86 apps, GRUB password
-protection and more now out!
+protection, chroot assistance and much more!
 
 More info: https://wiki.bredos.org/en/blog/2025/05/07
 
