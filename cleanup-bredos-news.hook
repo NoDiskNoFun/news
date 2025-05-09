@@ -1,9 +1,0 @@
-[Trigger]
-Operation = Upgrade
-Type = Package
-Target = *
-
-[Action]
-Description = Clean news cache after package upgrade...
-When = PostTransaction
-Exec = /usr/bin/find /tmp -maxdepth 1 -name 'bredos-news*' -delete

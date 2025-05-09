@@ -1,0 +1,15 @@
+[Unit]
+Description=BredOS News Update Service
+After=network.target
+Wants=network.target
+
+[Service]
+ExecStart=/usr/bin/bredos-news-update-watcher
+Restart=always
+RestartSec=5
+Nice=19
+IOSchedulingClass=idle
+Type=simple
+
+[Install]
+WantedBy=default.target

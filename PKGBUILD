@@ -1,24 +1,30 @@
 # Maintainer: Bill Sideris <bill88t@bredos.org>
 
 pkgname=bredos-news
-pkgver=1.4.0
+pkgver=1.5.0
 pkgrel=1
 pkgdesc='BredOS news and system information utility'
 arch=(any)
 url=https://github.com/BredOS/sys-report
 license=('GPL3')
+install=news.install
 
-depends=('python' 'python-aiohttp' 'python-psutil')
+depends=('python' 'python-aiohttp' 'python-psutil' 'python-pyinotify')
 optdepends=('pacman-contrib: Show updatable packages' 'yay: Check for updatable development packages')
 
-source=('99-bredos-news.sh' 'bredos-news.py' 'cleanup-bredos-news.hook')
+source=('99-bredos-news.sh'
+        'bredos-news.py'
+        'bredos-news-update-watcher.py'
+        'bredos-news-update.service')
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP')
 
 package() {
-    mkdir -p "${pkgdir}/usr/bin" "${pkgdir}/etc/profile.d" "${pkgdir}/usr/share/libalpm/hooks/"
+    mkdir -p "${pkgdir}/usr/bin" "${pkgdir}/etc/profile.d"
     install -Dm755 "${srcdir}/bredos-news.py" "${pkgdir}/usr/bin/bredos-news"
     install -Dm755 "${srcdir}/99-bredos-news.sh" "${pkgdir}/etc/profile.d/"
-    install -Dm644 "${srcdir}/cleanup-bredos-news.hook" "${pkgdir}/usr/share/libalpm/hooks/cleanup-bredos-news.hook"
+    install -Dm755 "${srcdir}/bredos-news-update-watcher.py" "${pkgdir}/usr/bin/bredos-news-update-watcher"
+    install -Dm644 "${srcdir}/bredos-news-update.service" "${pkgdir}/usr/lib/systemd/system/bredos-news-update.service"
 }

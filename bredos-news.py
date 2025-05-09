@@ -13,7 +13,7 @@ try:
     hush_news = (not os.geteuid()) or os.path.isfile(hush_news_path)
     hush_updates = (not os.geteuid()) or os.path.isfile(hush_updates_path)
 
-    import asyncio, platform, psutil, aiohttp, socket, json, signal
+    import asyncio, platform, psutil, aiohttp, socket, json, signal, shutil
     from collections import Counter
     from pathlib import Path
     from datetime import datetime, timedelta
@@ -22,6 +22,9 @@ except KeyboardInterrupt:
     import os
 
     os._exit(0)
+
+
+CACHE_FILE = "/tmp/news_cache.json"
 
 
 def lc() -> None:
@@ -406,62 +409,47 @@ async def count_failed_systemd() -> dict:
     return {"total": total_count, "breakdown": dict(total_statuses)}
 
 
+def time_ago(ts):
+    delta = int(time()) - int(ts)
+    if delta < 60:
+        return f"{delta}s ago"
+    elif delta < 3600:
+        return f"{delta // 60}m ago"
+    elif delta < 86400:
+        return f"{delta // 3600}h ago"
+    else:
+        return f"{delta // 86400}d ago"
+
+
 async def get_updates():
     if hush_updates:
         return  # Do not do anything
+
     try:
-        process = await asyncio.create_subprocess_exec(
-            "checkupdates",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-            preexec_fn=lambda: os.nice(20),  # Maximum priority
-        )
+        with open(CACHE_FILE, "r") as f:
+            data = json.load(f)
+            updates = data.get("updates")
+            devel_updates = data.get("devel_updates")
+            timestamp = data.get("timestamp")
+            msgs = []
 
-        try:
-            stdout, _ = await asyncio.wait_for(process.communicate(), timeout=8)
-        except asyncio.TimeoutError:
-            process.kill()
-            return
+            if shutil.which("checkupdates") is None:
+                msgs.append(
+                    "Install `pacman-contrib` to view available updates during login.\n"
+                )
+            if shutil.which("yay") is None:
+                msgs.append(
+                    "Install `yay` to view development package updates during login.\n"
+                )
+            ago = time_ago(timestamp)
 
-        updates = stdout.decode().strip().split("\n")
-        updates = [line for line in updates if line]
-
-        return len(updates) if updates else 0
-
-    except FileNotFoundError:
-        return "Install `pacman-contrib` to view available updates during login."
-    except Exception:
-        return
-
-
-async def get_devel_updates():
-    if hush_updates:
-        return  # Do not do anything
-    try:
-        process = await asyncio.create_subprocess_exec(
-            "yay",
-            "-Qua",
-            "--devel",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-            preexec_fn=lambda: os.nice(20),  # Maximum priority
-        )
-
-        try:
-            stdout, _ = await asyncio.wait_for(process.communicate(), timeout=8)
-        except asyncio.TimeoutError:
-            process.kill()
-            return
-
-        updates = stdout.decode().strip().split("\n")
-        updates = [line for line in updates if line]  # Remove empty lines
-
-        return len(updates) if updates else 0
-
-    except FileNotFoundError:
-        return "Install `yay` to view development package updates during login."
-    except Exception:
-        return None
+            return [
+                updates,
+                devel_updates,
+                [f"{colors.bland_t}(Latest check was {ago}){colors.endc}"] + msgs,
+            ]
+    except:
+        return f"\n{colors.bland_t}The updates status has not yet refreshed. Check back later.{colors.endc}\n"
 
 
 async def fetch_news():
@@ -519,6 +507,7 @@ class colors:
     magenta_t = "\033[35m"
     cyan_t = "\033[36m"
     white_t = "\033[37m"
+    bland_t = "\033[2;37m"
 
     # Background
     white_bg_black_bg = "\033[38;5;0m\033[48;5;255m"
@@ -527,227 +516,157 @@ class colors:
 
 
 clear_seq = "\x1b[2J\x1b[3J\x1b[H"
-
-
-def cache_gen(update_str: str, news_str: str):
-    data = {"timestamp": int(time()), "updates": update_str, "news": news_str}
-    with open("/tmp/bredos-news." + str(os.geteuid()) + ".tmp", "w") as f:
-        json.dump(data, f)
-
-
-def fetch_cache():
-    if not os.path.exists("/tmp/bredos-news." + str(os.geteuid()) + ".tmp"):
-        return None
-
-    with open("/tmp/bredos-news." + str(os.geteuid()) + ".tmp") as f:
-        data = json.load(f)
-
-    timestamp = data.get("timestamp")
-    if timestamp is None:
-        return None
-
-    if datetime.now() - datetime.fromtimestamp(timestamp) <= timedelta(hours=6):
-        return data.get("updates"), data.get("news")
-
-    return None
+# clear_seq = ""
 
 
 async def main() -> None:
-    args = set(argv[1:])
-    if "--help" in args or "-h" in args:
-        print("Wow..")
-    elif "--clear" in args or "-c" in args:
-        for file in Path("/tmp").glob("bredos-news*"):
-            if file.is_file():
-                file.unlink()
-    else:
-        silent = "--silent" in args or "-s" in args
-        info_task = get_system_info()
-        services_task = count_failed_systemd()
+    info_task = get_system_info()
+    services_task = count_failed_systemd()
 
-        devel_updates_task = None
-        news_task = None
-        updates_available = None
-        devel_updates_available = None
-        upd_str = None
-        news = None
+    if not hush_news:
+        news_task = fetch_news()
+    if not hush_updates:
+        updates_task = get_updates()
 
-        cache_data = fetch_cache()
-        if cache_data:
-            upd_str = cache_data[0]
-            news = cache_data[1]
+    news = None
+    updates = None
 
-        if not (hush_updates or upd_str):
-            updates_task = get_updates()
-            devel_updates_task = get_devel_updates()
+    device = None
+    sbc_declared = detect_install_device()
+    if sbc_declared in sbc_list:
+        device = sbc_declared
 
-        if not news:
-            news_task = fetch_news()
+    system_info = await info_task
 
-        device = None
-        sbc_declared = detect_install_device()
-        if sbc_declared in sbc_list:
-            device = sbc_declared
+    print(
+        f"{clear_seq}{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})"
+    )
+    print(
+        f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/"
+    )
+    print(
+        f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n"
+    )
 
-        system_info = await info_task
+    device_str = ""
+    if device is not None:
+        device_str += f"{colors.okblue if os.geteuid() else colors.red_t}Device:{colors.endc} {device}"
 
-        if not silent:
-            print(
-                f"{clear_seq}{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})"
-            )
-            print(
-                f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/"
-            )
-            print(
-                f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n"
-            )
+    hostname_str = f"{colors.okblue if os.geteuid() else colors.red_t}Hostname:{colors.endc} {system_info['hostname']}"
 
-        device_str = ""
-        if device is not None:
-            device_str += f"{colors.okblue if os.geteuid() else colors.red_t}Device:{colors.endc} {device}"
+    uptime_str = f"{colors.okblue if os.geteuid() else colors.red_t}Uptime:{colors.endc} {system_info['uptime']}"
+    logged_str = f"{colors.okblue if os.geteuid() else colors.red_t}Users logged in:{colors.endc} {system_info['logged_in_users']}"
 
-        hostname_str = f"{colors.okblue if os.geteuid() else colors.red_t}Hostname:{colors.endc} {system_info['hostname']}"
+    cpu_str = f"{colors.okblue if os.geteuid() else colors.red_t}CPU:{colors.endc} {system_info['cpu_model']} ({system_info['cpu_count']}c, {system_info['cpu_threads']}t)"
+    load_str = f"{colors.okblue if os.geteuid() else colors.red_t}System load:{colors.endc} {system_info['system_load']}"
 
-        uptime_str = f"{colors.okblue if os.geteuid() else colors.red_t}Uptime:{colors.endc} {system_info['uptime']}"
-        logged_str = f"{colors.okblue if os.geteuid() else colors.red_t}Users logged in:{colors.endc} {system_info['logged_in_users']}"
+    memory_str = f"{colors.okblue if os.geteuid() else colors.red_t}Memory:{colors.endc} {system_info['memory_usage']} of {system_info['total_memory']} used"
 
-        cpu_str = f"{colors.okblue if os.geteuid() else colors.red_t}CPU:{colors.endc} {system_info['cpu_model']} ({system_info['cpu_count']}c, {system_info['cpu_threads']}t)"
-        load_str = f"{colors.okblue if os.geteuid() else colors.red_t}System load:{colors.endc} {system_info['system_load']}"
+    swap_str = ""
+    upd_str = ""
 
-        memory_str = f"{colors.okblue if os.geteuid() else colors.red_t}Memory:{colors.endc} {system_info['memory_usage']} of {system_info['total_memory']} used"
+    if system_info["swap_usage"] is not None:
+        swap_str = f"{colors.okblue if os.geteuid() else colors.red_t}Swap usage:{colors.endc} {system_info['swap_usage']}"
 
-        swap_str = ""
-        if system_info["swap_usage"] is not None:
-            swap_str = f"{colors.okblue if os.geteuid() else colors.red_t}Swap usage:{colors.endc} {system_info['swap_usage']}"
+    collumns = max(len(device_str), len(uptime_str), len(cpu_str), len(memory_str))
 
-        collumns = max(len(device_str), len(uptime_str), len(cpu_str), len(memory_str))
+    print(device_str, end="")
+    if device_str:
+        seperator(device_str, collumns)
+    print(hostname_str)
 
-        if not silent:
-            print(device_str, end="")
-            if device_str:
-                seperator(device_str, collumns)
-            print(hostname_str)
+    print(uptime_str, end="")
+    seperator(uptime_str, collumns)
+    print(logged_str)
 
-            print(uptime_str, end="")
-            seperator(uptime_str, collumns)
-            print(logged_str)
+    print(cpu_str, end="")
+    seperator(cpu_str, collumns)
+    print(load_str)
 
-            print(cpu_str, end="")
-            seperator(cpu_str, collumns)
-            print(load_str)
+    print(memory_str, end="")
 
-            print(memory_str, end="")
+    if swap_str:
+        seperator(memory_str, collumns)
+    print(swap_str)
 
-            if swap_str:
-                seperator(memory_str, collumns)
-            print(swap_str)
-
-            usage_str = f"{colors.okblue if os.geteuid() else colors.red_t}Usage of /:{colors.endc} {system_info['disk_usage']}"
-            print(usage_str, end="")
-            splitter = True
-            last = usage_str
-            for netname, ip in system_info["net_ifs"].items():
-                if splitter:
-                    seperator(last, collumns)
-                last = f"{colors.okblue if os.geteuid() else colors.red_t}{netname}:{colors.endc} {ip}"
-                print(last, end="")
-                if splitter:
-                    print()
-                splitter = not splitter
-            if splitter:
-                print()
-
-        if not hush_updates:
-            if not upd_str:
-                if not silent:
-                    print("Checking for updates.. (Skip with Ctrl+C)", end="")
-                    stdout.flush()
-                updates_available = await updates_task
-                devel_updates_available = await devel_updates_task
-                if not silent:
-                    lc()
-
-                if updates_available is not None:
-                    if isinstance(updates_available, str):
-                        upd_str = f"\n{colors.bold}{colors.red_t}{updates_available}{colors.endc}"
-                    if isinstance(devel_updates_available, str):
-                        upd_str = f"\n{colors.bold}{colors.red_t}{devel_updates_available}{colors.endc}"
-                    uisn = isinstance(updates_available, int)
-                    disn = isinstance(devel_updates_available, int)
-                    if updates_available and uisn:
-                        if devel_updates_available and disn:
-                            upd_str = f"\n{colors.bold}{colors.cyan_t}{updates_available+devel_updates_available} packages can be upgraded, of which {devel_updates_available} are development packages.{colors.endc}\n"
-                        else:
-                            upd_str = f"\n{colors.bold}{colors.cyan_t}{updates_available} packages can be upgraded.{colors.endc}\n"
-                    elif devel_updates_available and disn:
-                        upd_str = f"\n{colors.bold}{colors.cyan_t}{devel_updates_available} development packages can be upgraded.{colors.endc}\n"
-                    else:
-                        upd_str = (
-                            f"\n{colors.green_t}You are up to date!{colors.endc}\n"
-                        )
-                elif (not hush_updates) and not silent:
-                    print("\nTimed out waiting for updates.")
-
-            if upd_str and not silent:
-                print(upd_str, end="")
-
-        if not silent:
+    usage_str = f"{colors.okblue if os.geteuid() else colors.red_t}Usage of /:{colors.endc} {system_info['disk_usage']}"
+    print(usage_str, end="")
+    splitter = True
+    last = usage_str
+    for netname, ip in system_info["net_ifs"].items():
+        if splitter:
+            seperator(last, collumns)
+        last = f"{colors.okblue if os.geteuid() else colors.red_t}{netname}:{colors.endc} {ip}"
+        print(last, end="")
+        if splitter:
             print()
+        splitter = not splitter
+    if splitter:
+        print()
 
-        if not os.geteuid():
-            print(
-                colors.red_t
-                + "You're running as ROOT! Be careful and good luck!"
-                + colors.endc
-                + "\n"
-            )
-        elif not hush_news:
-            if not news:
-                if not silent:
-                    print("Fetching news.. (Skip with Ctrl+C)", end="")
-                    stdout.flush()
-                news = await news_task
-                if not silent:
-                    lc()
+    if not hush_updates:
+        updates = await updates_task
+        if isinstance(updates, list):
+            if updates[0] and not updates[1]:
+                upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0]} updates available.{colors.endc}\n"
+            elif updates[0] and updates[1]:
+                upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0] + updates[1]} updates available, of which {updates[1]} are development packages.{colors.endc}\n"
+            elif updates[1]:
+                upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[1]} development updates available.{colors.endc}\n"
+            else:
+                upd_str = f"\n{colors.green_t}You are up to date!{colors.endc}\n"
+            for i in updates[2]:
+                upd_str += i + "\n"
+        elif isinstance(updates, str):
+            upd_str = updates
 
-            if not silent:
-                print(news if news else "Failed to fetch news.")
+        if upd_str:
+            print(upd_str)
 
+    if not os.geteuid():
+        print(
+            colors.red_t
+            + "You're running as ROOT! Be careful and good luck!"
+            + colors.endc
+            + "\n"
+        )
+
+    elif not hush_news:
         if not news:
-            news = ""
-        if not upd_str:
-            upd_str = ""
+            print("Fetching news.. (Skip with Ctrl+C)", end="")
+            stdout.flush()
+            news = await news_task
+            lc()
 
-        if (
-            (not cache_data)
-            or (upd_str and not cache_data[0])
-            or (news and not cache_data[1])
-        ):
-            cache_gen(upd_str, news)
+        print(news if news else "Failed to fetch news.")
 
-        services = await services_task
-        if not silent:
-            if not services["total"]:
+    if not news:
+        news = ""
+    if not upd_str:
+        upd_str = ""
+
+    services = await services_task
+    if not services["total"]:
+        print(
+            f"{colors.bold}{colors.green_t}System is operating normally.{colors.endc}"
+        )
+    else:
+        for i in services["breakdown"].keys():
+            n = services["breakdown"][i]
+            if i == "failed":
                 print(
-                    f"{colors.bold}{colors.green_t}System is operating normally.{colors.endc}"
+                    f"{colors.bold}{colors.red_t}{n}{colors.endc} services have {colors.bold}{colors.red_t}{i}{colors.endc}"
                 )
             else:
-                for i in services["breakdown"].keys():
-                    n = services["breakdown"][i]
-                    if i == "failed":
-                        print(
-                            f"{colors.bold}{colors.red_t}{n}{colors.endc} services have {colors.bold}{colors.red_t}{i}{colors.endc}"
-                        )
-                    else:
-                        print(
-                            f'{colors.bold}{colors.yellow_t}{n}{colors.endc} services report status {colors.bold}{colors.yellow_t}"{i}"{colors.endc}'
-                        )
+                print(
+                    f'{colors.bold}{colors.yellow_t}{n}{colors.endc} services report status {colors.bold}{colors.yellow_t}"{i}"{colors.endc}'
+                )
 
-        # Clean current line
-        lc()
+    # Clean current line
+    lc()
 
-        # Just quit hard, asyncio is horrible
-        os._exit(0)
+    # Just quit hard, asyncio is horrible
+    os._exit(0)
 
 
 if __name__ == "__main__":

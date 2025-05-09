@@ -1,0 +1,13 @@
+post_install() {
+    systemctl enable --now bredos-news-update
+}
+
+post_upgrade() {
+    systemctl enable bredos-news-update
+    systemctl restart bredos-news-update
+}
+
+post_remove() {
+    systemctl disable --now bredos-news-update
+}
+
