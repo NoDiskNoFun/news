@@ -13,7 +13,7 @@ try:
     hush_news = (not os.geteuid()) or os.path.isfile(hush_news_path)
     hush_updates = (not os.geteuid()) or os.path.isfile(hush_updates_path)
 
-    import asyncio, platform, psutil, aiohttp, socket, json, signal, shutil
+    import asyncio, platform, psutil, socket, json, signal, shutil
     from collections import Counter
     from pathlib import Path
     from datetime import datetime, timedelta
@@ -422,14 +422,12 @@ def time_ago(ts):
 
 
 async def get_updates():
-    if hush_updates:
-        return  # Do not do anything
-
     try:
         with open(CACHE_FILE, "r") as f:
             data = json.load(f)
             updates = data.get("updates")
             devel_updates = data.get("devel_updates")
+            news = data.get("news")
             timestamp = data.get("timestamp")
             msgs = []
 
@@ -446,23 +444,11 @@ async def get_updates():
             return [
                 updates,
                 devel_updates,
+                news,
                 [f"{colors.bland_t}(Latest check was {ago}){colors.endc}"] + msgs,
             ]
     except:
         return f"\n{colors.bland_t}The updates status has not yet refreshed. Check back later.{colors.endc}\n"
-
-
-async def fetch_news():
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                "https://raw.githubusercontent.com/BredOS/news/refs/heads/main/notice.txt",
-                timeout=5,
-            ) as response:
-                response.raise_for_status()
-                return await response.text()
-    except:
-        return False
 
 
 def detect_install_device() -> str:
@@ -523,13 +509,8 @@ async def main() -> None:
     info_task = get_system_info()
     services_task = count_failed_systemd()
 
-    if not hush_news:
-        news_task = fetch_news()
-    if not hush_updates:
+    if not (hush_news and hush_updates):
         updates_task = get_updates()
-
-    news = None
-    updates = None
 
     device = None
     sbc_declared = detect_install_device()
@@ -601,27 +582,39 @@ async def main() -> None:
         if splitter:
             print()
         splitter = not splitter
+
     if splitter:
         print()
 
-    if not hush_updates:
+    if not (hush_updates and hush_news):
         updates = await updates_task
-        if isinstance(updates, list):
-            if updates[0] and not updates[1]:
-                upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0]} updates available.{colors.endc}\n"
-            elif updates[0] and updates[1]:
-                upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0] + updates[1]} updates available, of which {updates[1]} are development packages.{colors.endc}\n"
-            elif updates[1]:
-                upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[1]} development updates available.{colors.endc}\n"
-            else:
-                upd_str = f"\n{colors.green_t}You are up to date!{colors.endc}\n"
-            for i in updates[2]:
-                upd_str += i + "\n"
-        elif isinstance(updates, str):
-            upd_str = updates
 
-        if upd_str:
-            print(upd_str)
+        if not hush_updates:
+            if isinstance(updates, list):
+                if updates[0] and not updates[1]:
+                    upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0]} updates available.{colors.endc}\n"
+                elif updates[0] and updates[1]:
+                    upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0] + updates[1]} updates available, of which {updates[1]} are development packages.{colors.endc}\n"
+                elif updates[1]:
+                    upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[1]} development updates available.{colors.endc}\n"
+                else:
+                    upd_str = f"\n{colors.green_t}You are up to date!{colors.endc}\n"
+                for i in updates[3]:
+                    upd_str += i + "\n"
+            elif isinstance(updates, str):
+                upd_str = updates
+
+            if upd_str:
+                print(upd_str)
+
+        if not hush_news:
+            if hush_updates:
+                print()
+            if isinstance(updates, list):
+                news = updates[2]
+                print(news if news else "Failed to fetch news.")
+            else:
+                print("Failed to fetch news.")
 
     if not os.geteuid():
         print(
@@ -631,21 +624,9 @@ async def main() -> None:
             + "\n"
         )
 
-    elif not hush_news:
-        if not news:
-            print("Fetching news.. (Skip with Ctrl+C)", end="")
-            stdout.flush()
-            news = await news_task
-            lc()
-
-        print(news if news else "Failed to fetch news.")
-
-    if not news:
-        news = ""
-    if not upd_str:
-        upd_str = ""
-
     services = await services_task
+    if hush_updates and hush_news:
+        print()
     if not services["total"]:
         print(
             f"{colors.bold}{colors.green_t}System is operating normally.{colors.endc}"

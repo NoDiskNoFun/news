@@ -5,6 +5,7 @@ import time
 import socket
 import subprocess
 import pyinotify
+import requests
 
 CACHE_FILE = "/tmp/news_cache.json"
 WATCH_DIR = "/var/lib/pacman/"
@@ -55,10 +56,23 @@ def get_devel_updates():
     return len(dat or [])
 
 
-def write_cache(updates, devel_updates) -> None:
+def fetch_news():
+    try:
+        response = requests.get(
+            "https://raw.githubusercontent.com/BredOS/news/refs/heads/main/notice.txt",
+            timeout=5,
+        )
+        response.raise_for_status()
+        return response.text
+    except:
+        return False
+
+
+def write_cache(updates, devel_updates, news) -> None:
     payload = {
         "updates": updates,
         "devel_updates": devel_updates,
+        "news": news,
         "timestamp": int(time.time()),
     }
     try:
@@ -89,10 +103,11 @@ def check_and_update() -> bool:
     print("Update check triggered")
     updates = get_updates()
     devel = get_devel_updates()
+    news = fetch_news()
     if updates is None and devel is None:
         MUTEX_LOCK = False
         return False
-    write_cache(updates, devel)
+    write_cache(updates, devel, news)
     MUTEX_LOCK = False
     return True
 

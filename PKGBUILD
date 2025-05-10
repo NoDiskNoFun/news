@@ -1,7 +1,7 @@
 # Maintainer: Bill Sideris <bill88t@bredos.org>
 
 pkgname=bredos-news
-pkgver=1.5.0
+pkgver=1.6.0
 pkgrel=1
 pkgdesc='BredOS news and system information utility'
 arch=(any)
@@ -9,7 +9,7 @@ url=https://github.com/BredOS/sys-report
 license=('GPL3')
 install=news.install
 
-depends=('python' 'python-aiohttp' 'python-psutil' 'python-pyinotify')
+depends=('python' 'python-requests' 'python-psutil' 'python-pyinotify')
 optdepends=('pacman-contrib: Show updatable packages' 'yay: Check for updatable development packages')
 
 source=('99-bredos-news.sh'
