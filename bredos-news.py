@@ -618,10 +618,10 @@ async def main() -> None:
 
     if not os.geteuid():
         print(
-            colors.red_t
+            "\n"
+            + colors.red_t
             + "You're running as ROOT! Be careful and good luck!"
             + colors.endc
-            + "\n"
         )
 
     services = await services_task
