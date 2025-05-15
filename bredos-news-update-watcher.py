@@ -46,14 +46,15 @@ def run_command(cmd):
 
 
 def get_updates():
-    return len(run_command(["checkupdates"]) or [])
+    res = run_command(["checkupdates"])
+    return len(res) if isinstance(res, list) else res
 
 
 def get_devel_updates():
-    dat = run_command(["yay", "-Qua", "--devel"])
-    if dat:
-        dat = dat[1:]
-    return len(dat or [])
+    res = run_command(["yay", "-Qua", "--devel"])
+    if res:
+        res = res[1:]
+    return len(res) if isinstance(res, list) else res
 
 
 def fetch_news():
@@ -104,7 +105,7 @@ def check_and_update() -> bool:
     updates = get_updates()
     devel = get_devel_updates()
     news = fetch_news()
-    if updates is None and devel is None:
+    if updates is None or devel is None:
         MUTEX_LOCK = False
         return False
     write_cache(updates, devel, news)
