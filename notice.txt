@@ -1,7 +1,4 @@
-New additions to BredOS!
-Governor control, windows x86 apps, GRUB password
-protection, chroot assistance and much more!
-
-More info: https://wiki.bredos.org/en/blog/2025/05/07
+RK3588 Panthor Vulkan 1.2 is now available!
+More info: https://wiki.bredos.org/en/blog/2025/05/18
 
 - bill88t, the Domesticated Federal Pancake
