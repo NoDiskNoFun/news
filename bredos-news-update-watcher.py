@@ -1,7 +1,9 @@
 #!/usr/bin/env -S python3 -u
 import os
+import re
 import json
 import time
+import glob
 import socket
 import subprocess
 import pyinotify
@@ -17,6 +19,106 @@ MAX_RETRIES = 20
 WATCHDOG_TIMEOUT = 5
 
 MUTEX_LOCK = False
+
+
+def emmc_lifetime_estimation() -> dict:
+    results = {}
+
+    for dev_path in glob.glob("/dev/mmcblk[0-9]"):
+        devname = os.path.basename(dev_path)
+        sys_dev_path = os.path.realpath(f"/sys/block/{devname}/device")
+        type_path = os.path.join(sys_dev_path, "type")
+
+        try:
+            with open(type_path) as f:
+                dev_type = f.read().strip()
+            if dev_type != "MMC":
+                continue  # Not an eMMC device
+        except FileNotFoundError:
+            continue  # Unexpected sysfs layout, skip
+
+        try:
+            output = subprocess.check_output(
+                ["sudo", "mmc", "extcsd", "read", dev_path],
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+        except subprocess.CalledProcessError:
+            continue  # command failed unexpectedly
+
+        match_a = re.search(
+            r"EXT_CSD_DEVICE_LIFE_TIME_EST_TYP_A\]:\s+0x([0-9A-Fa-f]+)", output
+        )
+        match_b = re.search(
+            r"EXT_CSD_DEVICE_LIFE_TIME_EST_TYP_B\]:\s+0x([0-9A-Fa-f]+)", output
+        )
+
+        if not match_a or not match_b:
+            continue  # could not parse values
+
+        val_a = int(match_a.group(1), 16)
+        val_b = int(match_b.group(1), 16)
+
+        def hex_to_percent(val):
+            return min(val, 10) * 10  # clamp to 100%
+
+        percent = max(hex_to_percent(val_a), hex_to_percent(val_b))
+        results[dev_path] = percent
+
+    return results
+
+
+def smart_health_report() -> dict:
+    devices = []
+    result = {}
+
+    try:
+        scan_output = subprocess.check_output(["smartctl", "--scan-open"], text=True)
+        devices = [line.split()[0] for line in scan_output.splitlines()]
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError("Failed to scan for SMART devices") from e
+
+    for dev in devices:
+        try:
+            output = subprocess.check_output(["smartctl", "-Aj", "-Hj", dev], text=True)
+            data = json.loads(output)
+        except (subprocess.CalledProcessError, json.JSONDecodeError):
+            result[dev] = "CRIT"
+            continue
+
+        # Check overall SMART support + health
+        smart = data.get("smart_status", {})
+        if not smart.get("passed", False):
+            result[dev] = "CRIT"
+            continue
+
+        # Look for reallocated sectors (ID 5)
+        reallocated = 0
+        attrs = data.get("ata_smart_attributes", {}).get("table", [])
+        for attr in attrs:
+            if attr.get("id") == 5:  # Reallocated_Sector_Ct
+                reallocated = attr.get("raw", {}).get("value", 0)
+                break
+
+        attrs = data.get("nvme_smart_health_information_log", {}).get("table", [])
+        if "percentage_used" in attrs and attrs["percentage_used"] > 40:
+            reallocated = 1
+
+        if reallocated > 0:
+            result[dev] = "WARN"
+        else:
+            result[dev] = "OK"
+
+    eMMCs = emmc_lifetime_estimation()
+    for mmc in eMMCs:
+        if eMMCs[mmc] > 75:
+            result[mmc] = "CRIT"
+        elif eMMCs[mmc] > 50:
+            result[mmc] = "WARN"
+        else:
+            result[mmc] = "OK"
+
+    return result
 
 
 def has_internet() -> bool:
@@ -57,7 +159,7 @@ def get_devel_updates():
     return len(res) if isinstance(res, list) else res
 
 
-def fetch_news():
+def fetch_news() -> str | bool:
     try:
         response = requests.get(
             "https://raw.githubusercontent.com/BredOS/news/refs/heads/main/notice.txt",
@@ -69,12 +171,13 @@ def fetch_news():
         return False
 
 
-def write_cache(updates, devel_updates, news) -> None:
+def write_cache(updates, devel_updates, news, smart) -> None:
     payload = {
         "updates": updates,
         "devel_updates": devel_updates,
         "news": news,
         "timestamp": int(time.time()),
+        "smart": smart,
     }
     try:
         tmp = CACHE_FILE + ".tmp"
@@ -105,10 +208,11 @@ def check_and_update() -> bool:
     updates = get_updates()
     devel = get_devel_updates()
     news = fetch_news()
+    smart = smart_health_report()
     if updates is None or devel is None:
         MUTEX_LOCK = False
         return False
-    write_cache(updates, devel, news)
+    write_cache(updates, devel, news, smart)
     MUTEX_LOCK = False
     return True
 
@@ -151,6 +255,6 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         pass
-    except:
-        pass
+    # except:
+    #     pass
     print("Bye!")

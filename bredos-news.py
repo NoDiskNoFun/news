@@ -10,8 +10,10 @@ try:
 
     hush_news_path = os.path.expanduser("~/.hush_news")
     hush_updates_path = os.path.expanduser("~/.hush_updates")
+    hush_disks_path = os.path.expanduser("~/.hush_disks")
     hush_news = (not os.geteuid()) or os.path.isfile(hush_news_path)
     hush_updates = (not os.geteuid()) or os.path.isfile(hush_updates_path)
+    hush_disks = (not os.geteuid()) or os.path.isfile(hush_disks_path)
 
     import asyncio, platform, psutil, socket, json, signal, shutil
     from collections import Counter
@@ -429,6 +431,7 @@ async def get_updates():
             devel_updates = data.get("devel_updates")
             news = data.get("news")
             timestamp = data.get("timestamp")
+            smart = data.get("smart")
             msgs = []
 
             if shutil.which("checkupdates") is None:
@@ -446,6 +449,7 @@ async def get_updates():
                 devel_updates,
                 news,
                 [f"{colors.bland_t}(Latest check was {ago}){colors.endc}"] + msgs,
+                smart,
             ]
     except:
         return f"\n{colors.bland_t}The updates status has not yet refreshed. Check back later.{colors.endc}\n"
@@ -508,9 +512,7 @@ clear_seq = "\x1b[2J\x1b[3J\x1b[H"
 async def main() -> None:
     info_task = get_system_info()
     services_task = count_failed_systemd()
-
-    if not (hush_news and hush_updates):
-        updates_task = get_updates()
+    updates_task = get_updates()
 
     device = None
     sbc_declared = detect_install_device()
@@ -586,35 +588,55 @@ async def main() -> None:
     if splitter:
         print()
 
-    if not (hush_updates and hush_news):
-        updates = await updates_task
+    updates = await updates_task
 
-        if not hush_updates:
-            if isinstance(updates, list):
-                if updates[0] and not updates[1]:
-                    upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0]} updates available.{colors.endc}\n"
-                elif updates[0] and updates[1]:
-                    upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0] + updates[1]} updates available, of which {updates[1]} are development packages.{colors.endc}\n"
-                elif updates[1]:
-                    upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[1]} development updates available.{colors.endc}\n"
-                else:
-                    upd_str = f"\n{colors.green_t}You are up to date!{colors.endc}\n"
-                for i in updates[3]:
-                    upd_str += i + "\n"
-            elif isinstance(updates, str):
-                upd_str = updates
-
-            if upd_str:
-                print(upd_str)
-
-        if not hush_news:
-            if hush_updates:
-                print()
-            if isinstance(updates, list):
-                news = updates[2]
-                print(news if news else "Failed to fetch news.")
+    if not hush_updates:
+        if isinstance(updates, list):
+            if updates[0] and not updates[1]:
+                upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0]} updates available.{colors.endc}\n"
+            elif updates[0] and updates[1]:
+                upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0] + updates[1]} updates available, of which {updates[1]} are development packages.{colors.endc}\n"
+            elif updates[1]:
+                upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[1]} development updates available.{colors.endc}\n"
             else:
-                print("Failed to fetch news.")
+                upd_str = f"\n{colors.green_t}You are up to date!{colors.endc}\n"
+            for i in updates[3]:
+                upd_str += i + "\n"
+        elif isinstance(updates, str):
+            upd_str = updates
+
+        if upd_str:
+            print(upd_str)
+
+    if not hush_news:
+        if hush_updates:
+            print()
+        if isinstance(updates, list):
+            news = updates[2]
+            print(news if news else "Failed to fetch news.")
+        else:
+            print("Failed to fetch news.")
+
+    show_url = False
+    if not hush_disks:
+        if isinstance(updates[4], dict):
+            for drive in updates[4].keys():
+                state = updates[4][drive]
+                if state == "WARN":
+                    print(
+                        f'{colors.bold}{colors.yellow_t}Drive "{drive}" reliability compromised - Backup your data{colors.endc}'
+                    )
+                    show_url = True
+                elif state == "CRIT":
+                    print(
+                        f'{colors.bold}{colors.red_t}DRIVE "{drive}" CRITICAL HEALTH - BACKUP YOUR DATA{colors.endc}'
+                    )
+                    show_url = True
+
+        if show_url:
+            print(
+                f"\n{colors.bold}For more information, visit:\n{colors.blue_t}https://wiki.bredos.org/en/how-to/disk-failure{colors.endc}\n"
+            )
 
     if not os.geteuid():
         print(
