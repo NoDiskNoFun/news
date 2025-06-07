@@ -1,4 +1,4 @@
-RK3588 Panthor Vulkan 1.2 is now available!
-More info: https://wiki.bredos.org/en/blog/2025/05/18
+BredOS System Configurator released!
+More info: https://wiki.bredos.org/en/blog/2025/06/07
 
 - bill88t, the Domesticated Federal Pancake
