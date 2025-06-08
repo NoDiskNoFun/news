@@ -36,13 +36,28 @@ except KeyboardInterrupt:
     os._exit(0)
 
 
+def terminal_size():
+    try:
+        size = shutil.get_terminal_size(fallback=(80, 24))
+        return size.columns, size.lines
+    except Exception:
+        return 80, 24  # conservative fallback
+
+
 CACHE_FILE = "/tmp/news_cache.json"
 printed_lines = 0
 last_lines = []
+last_size = terminal_size()
 
 
 def refresh_lines(new_lines: list[str]) -> None:
-    global printed_lines, last_lines
+    global printed_lines, last_lines, last_size
+    curterm = terminal_size()
+    if curterm != last_size:
+        stdout.write("\033[2J\033[3J\033[H")
+        last_lines = []
+        printed_lines = 0
+        last_size = curterm
 
     physical_lines = []
     buf = ""
@@ -70,13 +85,19 @@ def refresh_lines(new_lines: list[str]) -> None:
         stdout.write(f"\033[{printed_lines}F")
 
     # Print the new physical lines exactly as-is
-    for pline in physical_lines:
-        print("\033[2K" + pline)
+    for i in range(len(physical_lines)):
+        if (new_physical_lines != printed_lines) or (
+            physical_lines[i] != last_lines[i]
+        ):
+            print("\033[2K" + physical_lines[i])
+        else:
+            print()
 
     # Clear leftovers if we previously printed more lines
     if printed_lines > new_physical_lines:
         for _ in range(printed_lines - new_physical_lines):
             print("\x1b[2K")
+        stdout.write(f"\033[{printed_lines-new_physical_lines}F")
 
     printed_lines = new_physical_lines
     last_lines = physical_lines
