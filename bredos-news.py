@@ -5,8 +5,9 @@ try:
     from sys import exit, stdin, stdout, argv
     from time import monotonic, time
 
+    screensaver_mode = "-s" in argv[1:]
     hush_login_path = os.path.expanduser("~/.hush_login")
-    if os.path.isfile(hush_login_path) or not stdin.isatty():
+    if (os.path.isfile(hush_login_path) or not stdin.isatty()) and not screensaver_mode:
         exit(0)
 
     path = f"/tmp/news_run_{os.getuid()}.txt"
@@ -731,7 +732,11 @@ async def main() -> None:
 
 
 async def loop_main() -> None:
-    # This is some whacko ass code.
+    global screensaver_mode
+    # Pure aneurism.
+
+    if screensaver_mode:
+        stdout.write("\033[?1049h\033[2J\033[H")
 
     fd = stdin.fileno()
     old_settings = termios.tcgetattr(fd)
@@ -740,7 +745,9 @@ async def loop_main() -> None:
 
     def handle_exit(signum=None, frame=None) -> None:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        stdout.write("\r\033[K\033[1F\033[K\033[?25h")
+        if screensaver_mode:
+            stdout.write("\033[?1049l")
+        stdout.write("\r\033[K\033[1F\033[K\033[?25h\0")
         stdout.flush()
         path = f"/tmp/news_run_{os.getuid()}.txt"
         with open(path, "w") as f:
@@ -754,9 +761,10 @@ async def loop_main() -> None:
         for _ in range(20):
             dr, _, _ = select.select([stdin], [], [], 0)
             if dr != []:
-                key = stdin.read(1)
-                if key != "\n":
-                    fcntl.ioctl(stdin, termios.TIOCSTI, key.encode())
+                buf = os.read(fd, 4096).decode(errors="ignore")
+                if buf != "\n" and not screensaver_mode:
+                    for ch in buf:
+                        fcntl.ioctl(stdin, termios.TIOCSTI, ch.encode())
                 handle_exit()
             await asyncio.sleep(0.04)
 
