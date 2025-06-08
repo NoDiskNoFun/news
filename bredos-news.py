@@ -38,10 +38,11 @@ except KeyboardInterrupt:
 
 CACHE_FILE = "/tmp/news_cache.json"
 printed_lines = 0
+last_lines = []
 
 
 def refresh_lines(new_lines: list[str]) -> None:
-    global printed_lines
+    global printed_lines, last_lines
 
     physical_lines = []
     buf = ""
@@ -60,6 +61,8 @@ def refresh_lines(new_lines: list[str]) -> None:
     if buf:
         physical_lines.append(buf)
 
+    if physical_lines == last_lines:
+        return
     new_physical_lines = len(physical_lines)
 
     # Clear previous physical lines
@@ -76,6 +79,7 @@ def refresh_lines(new_lines: list[str]) -> None:
             print("\x1b[2K")
 
     printed_lines = new_physical_lines
+    last_lines = physical_lines
 
 
 sbc_list = [
