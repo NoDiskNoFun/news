@@ -1,12 +1,22 @@
 #!/usr/bin/python3
 
 try:
-    from sys import exit, stdin, stdout, argv
     import os
+    from sys import exit, stdin, stdout, argv
+    from time import monotonic, time
 
     hush_login_path = os.path.expanduser("~/.hush_login")
     if os.path.isfile(hush_login_path) or not stdin.isatty():
         exit(0)
+
+    path = f"/tmp/news_run_{os.getuid()}.txt"
+    try:
+        with open(path, "r") as f:
+            ts = int(f.read().strip())
+        if time() - ts <= 2:
+            exit(0)
+    except (FileNotFoundError, ValueError):
+        pass
 
     hush_news_path = os.path.expanduser("~/.hush_news")
     hush_updates_path = os.path.expanduser("~/.hush_updates")
@@ -15,11 +25,11 @@ try:
     hush_updates = (not os.geteuid()) or os.path.isfile(hush_updates_path)
     hush_disks = (not os.geteuid()) or os.path.isfile(hush_disks_path)
 
-    import asyncio, platform, psutil, socket, json, signal, shutil
+    import asyncio, platform, psutil, socket, json
+    import signal, shutil, termios, tty, select, fcntl
     from collections import Counter
     from pathlib import Path
     from datetime import datetime, timedelta
-    from time import monotonic, time
 except KeyboardInterrupt:
     import os
 
@@ -27,20 +37,46 @@ except KeyboardInterrupt:
 
 
 CACHE_FILE = "/tmp/news_cache.json"
+printed_lines = 0
 
 
-def lc() -> None:
-    print("\r\033[K", end="")
+def refresh_lines(new_lines: list[str]) -> None:
+    global printed_lines
 
+    physical_lines = []
+    buf = ""
 
-def handle_exit(signum, frame):
-    # Clear current line for shell line
-    lc()
-    os._exit(0)
+    for chunk in new_lines:
+        buf += chunk
+        while True:
+            nl_pos = buf.find("\n")
+            if nl_pos == -1:
+                break
+            # Append substring up to newline (excluding '\n')
+            physical_lines.append(buf[:nl_pos])
+            buf = buf[nl_pos + 1 :]
 
+    # Append remainder if any (no trailing newline)
+    if buf:
+        physical_lines.append(buf)
 
-# Register signal handlers for SIGINT (Ctrl+C)
-signal.signal(signal.SIGINT, handle_exit)
+    new_physical_lines = len(physical_lines)
+
+    # Clear previous physical lines
+    for _ in range(printed_lines):
+        stdout.write("\x1b[1A\x1b[2K")
+
+    # Print the new physical lines exactly as-is
+    for pline in physical_lines:
+        print(pline)
+
+    # Clear leftovers if we previously printed more lines
+    if printed_lines > new_physical_lines:
+        for _ in range(printed_lines - new_physical_lines):
+            print("\x1b[2K")
+
+    printed_lines = new_physical_lines
+
 
 sbc_list = [
     "ArmSoM AIM7 ",
@@ -70,6 +106,8 @@ sbc_list = [
     "Orange Pi 5 Ultra" "Orange Pi 5 Max",
     "Orange Pi 5 Plus",
     "Orange Pi 5 Pro",
+    "Orange Pi 5 Max",
+    "Orange Pi 5 Ultra",
     "Orange Pi 5B",
     "Orange Pi CM5",
     "RK3588 CoolPi CM5 EVB Board",
@@ -470,7 +508,7 @@ def detect_install_device() -> str:
 
 
 def seperator(current_str: str, collumns: int) -> None:
-    print((" " * (collumns - len(current_str) + 2)) + "   ", end="")
+    return (" " * (collumns - len(current_str) + 2)) + "   "
 
 
 class colors:
@@ -505,10 +543,6 @@ class colors:
     uninverse = "\033[27m"
 
 
-clear_seq = "\x1b[2J\x1b[3J\x1b[H"
-# clear_seq = ""
-
-
 async def main() -> None:
     info_task = get_system_info()
     services_task = count_failed_systemd()
@@ -520,15 +554,16 @@ async def main() -> None:
         device = sbc_declared
 
     system_info = await info_task
+    msg = []
 
-    print(
-        f"{clear_seq}{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})"
+    msg.append(
+        f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})\n"
     )
-    print(
-        f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/"
+    msg.append(
+        f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/\n"
     )
-    print(
-        f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n"
+    msg.append(
+        f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n\n"
     )
 
     device_str = ""
@@ -553,40 +588,40 @@ async def main() -> None:
 
     collumns = max(len(device_str), len(uptime_str), len(cpu_str), len(memory_str))
 
-    print(device_str, end="")
+    msg.append(device_str)
     if device_str:
-        seperator(device_str, collumns)
-    print(hostname_str)
+        msg.append(seperator(device_str, collumns))
+    msg.append(hostname_str + "\n")
 
-    print(uptime_str, end="")
-    seperator(uptime_str, collumns)
-    print(logged_str)
+    msg.append(uptime_str)
+    msg.append(seperator(uptime_str, collumns))
+    msg.append(logged_str + "\n")
 
-    print(cpu_str, end="")
-    seperator(cpu_str, collumns)
-    print(load_str)
+    msg.append(cpu_str)
+    msg.append(seperator(cpu_str, collumns))
+    msg.append(load_str + "\n")
 
-    print(memory_str, end="")
+    msg.append(memory_str)
 
     if swap_str:
-        seperator(memory_str, collumns)
-    print(swap_str)
+        msg.append(seperator(memory_str, collumns))
+    msg.append(swap_str + "\n")
 
     usage_str = f"{colors.okblue if os.geteuid() else colors.red_t}Usage of /:{colors.endc} {system_info['disk_usage']}"
-    print(usage_str, end="")
+    msg.append(usage_str)
     splitter = True
     last = usage_str
     for netname, ip in system_info["net_ifs"].items():
         if splitter:
-            seperator(last, collumns)
+            msg.append(seperator(last, collumns))
         last = f"{colors.okblue if os.geteuid() else colors.red_t}{netname}:{colors.endc} {ip}"
-        print(last, end="")
+        msg.append(last)
         if splitter:
-            print()
+            msg.append("\n")
         splitter = not splitter
 
     if splitter:
-        print()
+        msg.append("\n")
 
     updates = await updates_task
 
@@ -606,16 +641,16 @@ async def main() -> None:
             upd_str = updates
 
         if upd_str:
-            print(upd_str)
+            msg.append(upd_str + "\n")
 
     if not hush_news:
         if hush_updates:
-            print()
+            msg.append("\n")
         if isinstance(updates, list):
             news = updates[2]
-            print(news if news else "Failed to fetch news.")
+            msg += [news if news else "Failed to fetch news.", "\n"]
         else:
-            print("Failed to fetch news.")
+            msg.append("Failed to fetch news.")
 
     show_url = False
     if not hush_disks:
@@ -623,54 +658,83 @@ async def main() -> None:
             for drive in updates[4].keys():
                 state = updates[4][drive]
                 if state == "WARN":
-                    print(
-                        f'{colors.bold}{colors.yellow_t}Drive "{drive}" reliability compromised - Backup your data{colors.endc}'
+                    msg.append(
+                        f'{colors.bold}{colors.yellow_t}Drive "{drive}" reliability compromised - Backup your data{colors.endc}\n'
                     )
                     show_url = True
                 elif state == "CRIT":
-                    print(
-                        f'{colors.bold}{colors.red_t}DRIVE "{drive}" CRITICAL HEALTH - BACKUP YOUR DATA{colors.endc}'
+                    msg.append(
+                        f'{colors.bold}{colors.red_t}DRIVE "{drive}" CRITICAL HEALTH - BACKUP YOUR DATA{colors.endc}\n'
                     )
                     show_url = True
 
         if show_url:
-            print(
-                f"\n{colors.bold}For more information, visit:\n{colors.blue_t}https://wiki.bredos.org/en/how-to/disk-failure{colors.endc}\n"
+            msg.append(
+                f"\n{colors.bold}For more information, visit:\n{colors.blue_t}https://wiki.bredos.org/en/how-to/disk-failure{colors.endc}\n\n"
             )
 
     if not os.geteuid():
-        print(
+        msg.append(
             "\n"
             + colors.red_t
             + "You're running as ROOT! Be careful and good luck!"
             + colors.endc
+            + "\n"
         )
 
     services = await services_task
     if hush_updates and hush_news:
-        print()
+        msg.append("\n")
     if not services["total"]:
-        print(
-            f"{colors.bold}{colors.green_t}System is operating normally.{colors.endc}"
+        msg.append(
+            f"{colors.bold}{colors.green_t}System is operating normally.{colors.endc}\n"
         )
     else:
         for i in services["breakdown"].keys():
             n = services["breakdown"][i]
             if i == "failed":
-                print(
-                    f"{colors.bold}{colors.red_t}{n}{colors.endc} services have {colors.bold}{colors.red_t}{i}{colors.endc}"
+                msg.append(
+                    f"{colors.bold}{colors.red_t}{n}{colors.endc} services have {colors.bold}{colors.red_t}{i}{colors.endc}\n"
                 )
             else:
-                print(
-                    f'{colors.bold}{colors.yellow_t}{n}{colors.endc} services report status {colors.bold}{colors.yellow_t}"{i}"{colors.endc}'
+                msg.append(
+                    f'{colors.bold}{colors.yellow_t}{n}{colors.endc} services report status {colors.bold}{colors.yellow_t}"{i}"{colors.endc}\n'
                 )
 
-    # Clean current line
-    lc()
+    msg.append(f"\n{colors.bland_t}[Press any key to enter the shell]{colors.endc}")
+    refresh_lines(msg)
 
-    # Just quit hard, asyncio is horrible
-    os._exit(0)
+
+async def loop_main() -> None:
+    # This is some whacko ass code.
+
+    fd = stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
+    print("\033[?25l")
+
+    def handle_exit(signum=None, frame=None) -> None:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        stdout.write("\r\033[K\033[1F\033[K\033[?25h")
+        stdout.flush()
+        path = f"/tmp/news_run_{os.getuid()}.txt"
+        with open(path, "w") as f:
+            f.write(str(int(time())))
+        os._exit(0)
+
+    signal.signal(signal.SIGINT, handle_exit)
+
+    while True:
+        await main()
+        for _ in range(20):
+            dr, _, _ = select.select([stdin], [], [], 0)
+            if dr != []:
+                key = stdin.read(1)
+                if key != "\n":
+                    fcntl.ioctl(stdin, termios.TIOCSTI, key.encode())
+                handle_exit()
+            await asyncio.sleep(0.04)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(loop_main())

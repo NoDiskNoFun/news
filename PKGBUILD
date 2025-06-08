@@ -1,11 +1,11 @@
 # Maintainer: Bill Sideris <bill88t@bredos.org>
 
 pkgname=bredos-news
-pkgver=1.8.1
-pkgrel=3
+pkgver=1.9.0
+pkgrel=4
 pkgdesc='BredOS news and system information utility'
 arch=('any')
-url=https://github.com/BredOS/sys-report
+url=https://github.com/BredOS/news
 license=('GPL3')
 install=news.install
 
