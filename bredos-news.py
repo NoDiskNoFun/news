@@ -65,13 +65,13 @@ def refresh_lines(new_lines: list[str]) -> None:
         return
     new_physical_lines = len(physical_lines)
 
-    # Clear previous physical lines
-    for _ in range(printed_lines):
-        stdout.write("\x1b[1A\x1b[2K")
+    # Move up N == printed_lines
+    if printed_lines:
+        stdout.write(f"\033[{printed_lines}F")
 
     # Print the new physical lines exactly as-is
     for pline in physical_lines:
-        print(pline)
+        print("\033[2K" + pline)
 
     # Clear leftovers if we previously printed more lines
     if printed_lines > new_physical_lines:
