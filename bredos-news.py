@@ -711,7 +711,7 @@ async def loop_main() -> None:
     fd = stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     tty.setcbreak(fd)
-    print("\033[?25l")
+    stdout.write("\033[?25l")
 
     def handle_exit(signum=None, frame=None) -> None:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
