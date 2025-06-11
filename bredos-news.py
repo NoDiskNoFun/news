@@ -763,8 +763,11 @@ async def loop_main() -> None:
             if dr != []:
                 buf = os.read(fd, 4096).decode(errors="ignore")
                 if buf != "\n" and not screensaver_mode:
-                    for ch in buf:
-                        fcntl.ioctl(stdin, termios.TIOCSTI, ch.encode())
+                    try:
+                        for ch in buf:
+                            fcntl.ioctl(stdin, termios.TIOCSTI, ch.encode())
+                    except:  # Injection failed, just exit.
+                        pass
                 handle_exit()
             await asyncio.sleep(0.04)
 
