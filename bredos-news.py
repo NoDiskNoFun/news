@@ -674,9 +674,9 @@ async def main() -> None:
             msg.append("\n")
         if isinstance(updates, list):
             news = updates[2]
-            msg += [news if news else "Failed to fetch news.", "\n"]
+            msg += [(news if news else "Failed to fetch news.\n"), "\n"]
         else:
-            msg.append("Failed to fetch news.")
+            msg += ["Failed to fetch news.", "\n", "\n"]
 
     show_url = False
     if not hush_disks:

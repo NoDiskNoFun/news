@@ -1,7 +1,7 @@
 # Maintainer: Bill Sideris <bill88t@bredos.org>
 
 pkgname=bredos-news
-pkgver=1.10.1
+pkgver=1.10.2
 pkgrel=1
 pkgdesc='BredOS news and system information utility'
 arch=('any')
