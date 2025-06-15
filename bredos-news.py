@@ -7,7 +7,11 @@ try:
 
     screensaver_mode = "-s" in argv[1:]
     hush_login_path = os.path.expanduser("~/.hush_login")
-    if (os.path.isfile(hush_login_path) or not stdin.isatty()) and not screensaver_mode:
+    if (
+        os.path.isfile(hush_login_path)  # Hushed
+        or (not stdin.isatty())  # No stdin
+        or (not os.isatty(stdout.fileno()))  # UART terminal
+    ) and not screensaver_mode:
         exit(0)
 
     path = f"/tmp/news_run_{os.getuid()}.txt"
@@ -26,7 +30,7 @@ try:
     hush_updates = (not os.geteuid()) or os.path.isfile(hush_updates_path)
     hush_disks = (not os.geteuid()) or os.path.isfile(hush_disks_path)
 
-    import asyncio, platform, psutil, socket, json
+    import asyncio, platform, psutil, socket, json, re
     import signal, shutil, termios, tty, select, fcntl
     from collections import Counter
     from pathlib import Path
@@ -84,6 +88,19 @@ def refresh_lines(new_lines: list[str]) -> None:
     # Move up N == printed_lines
     if printed_lines:
         stdout.write(f"\033[{printed_lines}F")
+
+    # Terminal size checks
+    if (curterm[1] < new_physical_lines + 1) or (
+        curterm[0]
+        < max(
+            len(re.sub(r"\x1b\[[0-9;]*m", "", line).rstrip()) for line in physical_lines
+        )
+    ):
+        physical_lines = [
+            physical_lines[0],
+            f"{colors.bland_t}[Terminal too small]{colors.endc}",
+        ]
+        new_physical_lines = 2
 
     # Print the new physical lines exactly as-is
     for i in range(len(physical_lines)):
@@ -143,6 +160,7 @@ sbc_list = [
     "RK3588 MINIPC-MIZHUO LP4x V1.0 BlueBerry Board",
     "RK3588S CoolPi 4B Board",
     "ROC-RK3588S-PC V12(Linux)",
+    "Radxa Orion O6",
     "Radxa CM5 IO",
     "Radxa CM5 RPI CM4 IO",
     "Radxa NX5 IO",
@@ -762,7 +780,10 @@ async def loop_main() -> None:
             dr, _, _ = select.select([stdin], [], [], 0)
             if dr != []:
                 buf = os.read(fd, 4096).decode(errors="ignore")
-                if buf != "\n" and not screensaver_mode:
+                if (
+                    buf.isalnum() or len(buf) == 3 or ord(buf) == 4
+                ) and not screensaver_mode:
+                    # Do not inject if not a alphanum / Ctrl-D / Arrow key
                     try:
                         for ch in buf:
                             fcntl.ioctl(stdin, termios.TIOCSTI, ch.encode())
