@@ -975,7 +975,7 @@ async def loop_main() -> None:
                 if dr != []:
                     buf = os.read(fd, 4096).decode(errors="ignore")
                     if (
-                        buf.isalnum() or len(buf) > 2 or ord(buf) in [4, 12]
+                        buf.isalnum() or len(buf) - 1 or ord(buf) in [4, 12]
                     ) and not screensaver_mode:
                         # Do not inject if not a alphanum / Ctrl-D / Arrow key
                         try:
