@@ -32,6 +32,7 @@ try:
 
     import asyncio, platform, psutil, socket, json, re
     import signal, shutil, termios, tty, select, fcntl
+    import subprocess
     from collections import Counter
     from pathlib import Path
     from datetime import datetime, timedelta
@@ -53,7 +54,7 @@ CACHE_FILE = "/tmp/news_cache.json"
 printed_lines = 0
 last_lines = []
 last_size = terminal_size()
-ansi_re = re.compile(r"\x1b\[[0-9;]*m")
+ansi_re = re.compile(r"\x1b\[([0-9,A-Z]{1,2}(;[0-9]{1,2})?(;[0-9]{3})?)?[m|K]?")
 tix = 0
 
 
@@ -110,7 +111,7 @@ def refresh_lines(new_lines: list[str]) -> None:
         if (new_physical_lines != printed_lines) or (
             physical_lines[i] != last_lines[i]
         ):
-            print("\033[2K" + physical_lines[i])
+            stdout.write(f"\033[2K{physical_lines[i]}\n")
         else:
             print()
 
@@ -148,6 +149,7 @@ sbc_list = [
     "Mixtile Blade 3",
     "Mixtile Blade 3 v1.0.1",
     "Mixtile Core 3588E",
+    "Milk-V Mars",
     "Orange Pi 5",
     "Orange Pi 5 Ultra" "Orange Pi 5 Max",
     "Orange Pi 5 Plus",
@@ -156,6 +158,8 @@ sbc_list = [
     "Orange Pi 5 Ultra",
     "Orange Pi 5B",
     "Orange Pi CM5",
+    "Orange Pi RV",
+    "Orange Pi RV 2",
     "RK3588 CoolPi CM5 EVB Board",
     "RK3588 CoolPi CM5 NoteBook Board",
     "RK3588 EDGE LP4x V1.2 MeiZhuo BlueBerry Board",
@@ -581,10 +585,6 @@ async def get_updates():
             smart = data.get("smart")
             msgs = []
 
-            if shutil.which("checkupdates") is None:
-                msgs.append(
-                    "Install `pacman-contrib` to view available updates during login.\n"
-                )
             if shutil.which("yay") is None:
                 msgs.append(
                     "Install `yay` to view development package updates during login.\n"
@@ -598,7 +598,7 @@ async def get_updates():
                 [f"{colors.bland_t}(Latest check was {ago}){colors.endc}"] + msgs,
                 smart,
             ]
-    except:
+    except Exception as err:
         return f"\n{colors.bland_t}The updates status has not yet refreshed. Check back later.{colors.endc}\n"
 
 
@@ -617,7 +617,7 @@ def detect_install_device() -> str:
 
 
 def seperator(current_str: str, collumns: int) -> None:
-    return (" " * (collumns - len(current_str) + 2)) + "   "
+    return (" " * (collumns - len(nansi(current_str)) + 2)) + "   "
 
 
 class colors:
@@ -651,8 +651,38 @@ class colors:
     inverse = "\033[7m"
     uninverse = "\033[27m"
 
-    # Accent
+    # Accents
     accent = okblue
+    accent2 = yellow_t
+
+
+_nansi = {}
+_nansi_order = []
+
+
+def nansi(inpt: str) -> str:
+    if "\033" not in inpt:
+        return inpt.replace("\n", "")
+
+    if inpt in _nansi:
+        # Move to most recently used
+        _nansi_order.remove(inpt)
+        _nansi_order.append(inpt)
+        return _nansi[inpt]
+
+    # Compute result
+    result = ansi_re.sub("", inpt).replace("\n", "")
+
+    # Add to cache
+    _nansi[inpt] = result
+    _nansi_order.append(inpt)
+
+    # Evict least recently used if over capacity
+    if len(_nansi_order) > 50:
+        oldest = _nansi_order.pop(0)
+        del _nansi[oldest]
+
+    return result
 
 
 async def main() -> None:
@@ -669,23 +699,23 @@ async def main() -> None:
     system_info = await info_task
     msg = []
 
-    acctop = colors.accent if colors.accent != colors.okblue else colors.yellow_t
     msg.append(
-        f"{acctop if os.geteuid() else colors.red_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})\n"
+        f"{colors.accent2 if os.geteuid() else colors.red_t}{colors.bold}Welcome to BredOS{colors.endc} {colors.bland_t}({system_info['os_info']}){colors.endc}\n"
     )
     msg.append(
-        f"{acctop if os.geteuid() else colors.red_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/\n"
+        f"{colors.accent2 if os.geteuid() else colors.red_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/\n"
     )
     msg.append(
-        f"{acctop if os.geteuid() else colors.red_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n\n"
+        f"{colors.accent2 if os.geteuid() else colors.red_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n\n"
     )
 
     msg.append(
         f"        {colors.bland_t}System Info as of {datetime.now().strftime('%a %d @ %H:%M:%S')}{colors.endc}\n"
     )
+
     device_str = ""
     if device is not None:
-        device_str += f"{colors.accent if os.geteuid() else colors.red_t}Device:{colors.endc} {device}"
+        device_str += f"{colors.accent if os.geteuid() else colors.red_t}Device:{colors.endc} {colors.accent2}{device}{colors.endc}"
 
     hostname_str = f"{colors.accent if os.geteuid() else colors.red_t}Hostname:{colors.endc} {system_info['hostname']}"
 
@@ -700,10 +730,19 @@ async def main() -> None:
     swap_str = ""
     upd_str = ""
 
-    if system_info["swap_usage"] is not None:
-        swap_str = f"{colors.accent if os.geteuid() else colors.red_t}Swap usage:{colors.endc} {system_info['swap_usage']}"
+    splitter = True
+    last = memory_str
 
-    collumns = max(len(device_str), len(uptime_str), len(cpu_str), len(memory_str))
+    if system_info["swap_usage"] is not None:
+        swap_str = f"{colors.accent if os.geteuid() else colors.red_t}Swap usage:{colors.endc} {system_info['swap_usage']}\n"
+        splitter = False
+
+    collumns = max(
+        len(nansi(device_str)),
+        len(nansi(uptime_str)),
+        len(nansi(cpu_str)),
+        len(nansi(memory_str)),
+    )
 
     msg.append(device_str)
     if device_str:
@@ -722,10 +761,7 @@ async def main() -> None:
 
     if swap_str:
         msg.append(seperator(memory_str, collumns))
-    msg.append(swap_str + "\n")
-
-    splitter = False
-    last = " "
+        msg.append(swap_str)
 
     for netname, ip in system_info["net_ifs"].items():
         if splitter:
@@ -780,7 +816,7 @@ async def main() -> None:
             elif updates[1]:
                 upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[1]} development updates available.{colors.endc}\n"
             else:
-                upd_str = f"\n{colors.green_t}You are up to date!{colors.endc}\n"
+                upd_str = f"\n{colors.accent2 if colors.accent2 != colors.yellow_t else colors.green_t}You are up to date!{colors.endc}\n"
             for i in updates[3]:
                 upd_str += i + "\n"
         elif isinstance(updates, str):
@@ -833,7 +869,7 @@ async def main() -> None:
         msg.append("\n")
     if not services["total"]:
         msg.append(
-            f"{colors.bold}{colors.accent if colors.accent != colors.okblue else colors.green_t}System is operating normally.{colors.endc}\n"
+            f"{colors.bold}{colors.accent2 if colors.accent2 != colors.yellow_t else colors.green_t}System is operating normally.{colors.endc}\n"
         )
     else:
         for i in services["breakdown"].keys():
@@ -850,8 +886,8 @@ async def main() -> None:
     prompt = (
         "Press any key to enter the shell --- " if os.geteuid() else "CAUTION -!!- "
     )
-    width = max(
-        len(ansi_re.sub("", subline)) for line in msg for subline in line.splitlines()
+    width = (
+        max(len(nansi(subline)) for line in msg for subline in line.splitlines()) + 4
     )
     repeated = prompt * ((width // len(prompt)) + 3)
 
@@ -923,6 +959,7 @@ async def loop_main() -> None:
 
 
 Accent = None
+Accent_Secondary = None
 
 newsrc_path = os.path.expanduser("~/.newsrc")
 if os.path.isfile(newsrc_path):
@@ -930,13 +967,18 @@ if os.path.isfile(newsrc_path):
         exec(f.read(), globals())
 
 
-# Inject accent
+# Inject settings
 try:
     if Accent is not None and isinstance(Accent, str):
         setattr(colors, "accent", Accent)
 except:
     pass
 
+try:
+    if Accent_Secondary is not None and isinstance(Accent_Secondary, str):
+        setattr(colors, "accent2", Accent_Secondary)
+except:
+    pass
 
 if __name__ == "__main__":
     asyncio.run(loop_main())

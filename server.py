@@ -1,13 +1,16 @@
 #!/usr/bin/env -S python3 -u
-import os
-import re
-import json
-import time
-import glob
-import socket
-import subprocess
-import pyinotify
-import requests
+import os, re, json, time, glob, sys, io
+import socket, subprocess, pyinotify, requests
+from datetime import datetime
+
+# Rebind stdout/stderr to unbuffered UTF-8 streams for systemd
+sys.stdout = io.TextIOWrapper(
+    open(sys.stdout.fileno(), "wb", 0), encoding="utf-8", line_buffering=True
+)
+sys.stderr = io.TextIOWrapper(
+    open(sys.stderr.fileno(), "wb", 0), encoding="utf-8", line_buffering=True
+)
+
 
 CACHE_FILE = "/tmp/news_cache.json"
 WATCH_DIR = "/var/lib/pacman/"
@@ -20,7 +23,30 @@ WATCHDOG_TIMEOUT = 5
 
 MUTEX_LOCK = False
 
+_last_run_data = {}
 
+
+def once_per_day(func):
+    tag = func.__name__
+
+    def wrapper(*args, **kwargs):
+        now = datetime.now()
+        entry = _last_run_data.get(tag)
+
+        if entry:
+            last_run, cached_result = entry
+            if now.date() == last_run.date():
+                print(f"[once_per_day_cached] Skipping {tag}, returning cached result.")
+                return cached_result
+
+        result = func(*args, **kwargs)
+        _last_run_data[tag] = (now, result)
+        return result
+
+    return wrapper
+
+
+@once_per_day
 def emmc_lifetime_estimation() -> dict:
     results = {}
 
@@ -39,7 +65,7 @@ def emmc_lifetime_estimation() -> dict:
 
         try:
             output = subprocess.check_output(
-                ["sudo", "mmc", "extcsd", "read", dev_path],
+                ["mmc", "extcsd", "read", dev_path],
                 stderr=subprocess.DEVNULL,
                 text=True,
             )
@@ -68,6 +94,7 @@ def emmc_lifetime_estimation() -> dict:
     return results
 
 
+@once_per_day
 def smart_health_report() -> dict:
     devices = []
     result = {}

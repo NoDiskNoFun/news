@@ -4,7 +4,7 @@ After=network.target
 Wants=network.target
 
 [Service]
-ExecStart=/usr/bin/bredos-news-update-watcher
+ExecStart=/usr/bin/bredos-news-server
 Restart=always
 RestartSec=5
 Nice=19
