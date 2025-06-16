@@ -101,7 +101,7 @@ def refresh_lines(new_lines: list[str]) -> None:
     ):
         physical_lines = [
             physical_lines[0],
-            f"{colors.bland_t}[Terminal too small]{colors.endc}",
+            f"{colors.bland_t}[Terminal too small -- Press any key to enter the shell]{colors.endc}",
         ]
         new_physical_lines = 2
 
@@ -531,7 +531,7 @@ async def get_system_info() -> dict:
     }
 
 
-async def get_service_statuses(command: str):
+async def get_service_statuses(command: str) -> Counter:
     process = await asyncio.create_subprocess_shell(
         command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
