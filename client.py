@@ -964,7 +964,12 @@ Accent_Secondary = None
 newsrc_path = os.path.expanduser("~/.newsrc")
 if os.path.isfile(newsrc_path):
     with open(newsrc_path) as f:
-        exec(f.read(), globals())
+        try:
+            exec(f.read(), globals())
+        except KeyboardInterrupt:
+            print("What the hell is your config doing?")
+        except:
+            print("Exception while loading `~/.newsrc`, ignoring.")
 
 
 # Inject settings

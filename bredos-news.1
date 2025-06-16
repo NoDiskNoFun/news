@@ -33,6 +33,25 @@ Suppresses listing of storage devices.
 .I ~/.hush_smart
 Suppresses reporting of SMART health problems.
 
+.SH CONFIGURATION
+.nf
+\fBbredos-news\fR now supports a Python-based config file at \fI~/.newsrc\fR.
+Any valid Python code may be placed here to customize behavior.
+Some variables hold special meaning:
+.nf
+
+Example \fI~/.newsrc\fR:
+.PP
+.nf
+Accent = "\033[38;5;129m"
+Accent_Secondary = "\033[38;5;104m"
+# you can import modules, define functions, etc.
+.nf
+
+.TP
+.I ~/.newsrc
+Python script executed at startup. Variables defined here override defaults in the core utility.
+
 .SH FILES
 .TP
 \fI~/.hush_news\fR
@@ -42,7 +61,8 @@ Suppresses reporting of SMART health problems.
 \fI~/.hush_disks\fR
 .TP
 \fI~/.hush_smart\fR
-User-level hush files to disable specific categories of output.
+.TP
+\fI~/.newsrc\fR
 
 .SH AUTHOR
 Bill Sideris <bill88t@bredos.org>
