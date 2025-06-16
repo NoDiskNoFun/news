@@ -8,9 +8,7 @@ try:
     screensaver_mode = "-s" in argv[1:]
     hush_login_path = os.path.expanduser("~/.hush_login")
     if (
-        os.path.isfile(hush_login_path)  # Hushed
-        or (not stdin.isatty())  # No stdin
-        or (not os.isatty(stdout.fileno()))  # UART terminal
+        os.path.isfile(hush_login_path) or (not stdin.isatty())  # Hushed  # No stdin
     ) and not screensaver_mode:
         exit(0)
 
@@ -26,9 +24,11 @@ try:
     hush_news_path = os.path.expanduser("~/.hush_news")
     hush_updates_path = os.path.expanduser("~/.hush_updates")
     hush_disks_path = os.path.expanduser("~/.hush_disks")
+    hush_smart_path = os.path.expanduser("~/.hush_smart")
     hush_news = (not os.geteuid()) or os.path.isfile(hush_news_path)
     hush_updates = (not os.geteuid()) or os.path.isfile(hush_updates_path)
     hush_disks = (not os.geteuid()) or os.path.isfile(hush_disks_path)
+    hush_smart = (not os.geteuid()) or os.path.isfile(hush_smart_path)
 
     import asyncio, platform, psutil, socket, json, re
     import signal, shutil, termios, tty, select, fcntl
@@ -41,27 +41,30 @@ except KeyboardInterrupt:
     os._exit(0)
 
 
-def terminal_size():
+def terminal_size() -> tuple:
     try:
-        size = shutil.get_terminal_size(fallback=(80, 24))
+        size = shutil.get_terminal_size(fallback=(999, 999))
         return size.columns, size.lines
     except Exception:
-        return 80, 24  # conservative fallback
+        return 999, 999
 
 
 CACHE_FILE = "/tmp/news_cache.json"
 printed_lines = 0
 last_lines = []
 last_size = terminal_size()
+ansi_re = re.compile(r"\x1b\[[0-9;]*m")
+tix = 0
 
 
 def refresh_lines(new_lines: list[str]) -> None:
-    global printed_lines, last_lines, last_size
+    global printed_lines, last_lines, last_size, tix
     curterm = terminal_size()
     if curterm != last_size:
         stdout.write("\033[2J\033[3J\033[H")
         last_lines = []
         printed_lines = 0
+        tix = 0
         last_size = curterm
 
     physical_lines = []
@@ -341,6 +344,74 @@ def get_active_ipv4_interfaces() -> dict:
     return active_interfaces
 
 
+def get_storage_usages() -> dict:
+    mounts = {}
+    seen_devices = set()
+
+    with open("/proc/mounts", "r") as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            device, mountpoint = parts[0], parts[1]
+
+            # Skip non-real devices
+            if not device.startswith(("/dev/", "UUID=", "LABEL=")):
+                continue
+
+            # Skip duplicates
+            real_device = os.path.realpath(device)
+            if real_device in seen_devices:
+                continue
+            seen_devices.add(real_device)
+
+            try:
+                stats = os.statvfs(mountpoint)
+                total_bytes = stats.f_frsize * stats.f_blocks
+                free_bytes = stats.f_frsize * stats.f_bavail
+                used_bytes = total_bytes - free_bytes
+                if total_bytes == 0:
+                    continue  # Skip empty fs
+                percent_used = round((used_bytes / total_bytes) * 100, 1)
+            except Exception:
+                continue  # Skip unreadable
+
+            if (
+                "/efi" in mountpoint or "/boot" in mountpoint or len(mountpoint) > 40
+            ):  # Don't do boot partitions or Panda's gayshit
+                continue
+
+            try:
+                fstype = subprocess.check_output(
+                    ["findmnt", "-no", "FSTYPE", "--target", mountpoint],
+                    timeout=2,
+                    text=True,
+                ).strip()
+
+                if fstype == "btrfs":
+                    subvol = subprocess.check_output(
+                        ["btrfs", "subvolume", "show", mountpoint],
+                        stderr=subprocess.DEVNULL,
+                        text=True,
+                    )
+                    for line in subvol.splitlines():
+                        if line.strip().startswith("Name:"):
+                            name = line.strip().split(":", 1)[1].strip()
+                            if name not in ("@", "/"):
+                                break  # skip subvols like @home
+                    else:
+                        mounts[mountpoint] = [percent_used, total_bytes]
+                else:
+                    mounts[mountpoint] = [percent_used, total_bytes]
+            except:
+                mounts[mountpoint] = [percent_used, total_bytes]  # fallback
+
+    if "/" in mounts:
+        mounts["Usage of /"] = mounts["/"]
+        del mounts["/"]
+    return mounts
+
+
 async def get_system_info() -> dict:
     hostname = platform.node()
     os_info = f"GNU/Linux {platform.release()} {platform.machine()}"
@@ -368,9 +439,8 @@ async def get_system_info() -> dict:
 
     cpu_model = None
 
-    with open("/proc/cpuinfo", "r") as f:
-        cpuinfo = f.read()
-        cpuinfo = cpuinfo.splitlines()
+    with open("/proc/cpuinfo") as f:
+        cpuinfo = f.read().splitlines()
 
     for line in cpuinfo:
         if "cpu model" in line or "model name" in line:
@@ -406,12 +476,7 @@ async def get_system_info() -> dict:
     with open("/proc/stat") as f:
         processes = sum(1 for line in f if line.startswith("processes"))
 
-    disk_usage = os.statvfs("/")
-    total_space = disk_usage.f_frsize * disk_usage.f_blocks / (1024**3)  # GB
-    used_space = (
-        (disk_usage.f_blocks - disk_usage.f_bfree) * disk_usage.f_frsize / (1024**3)
-    )  # GB
-    usage_percent = (used_space / total_space) * 100
+    disks = get_storage_usages()
 
     logged_in_users = 0
     try:
@@ -456,7 +521,7 @@ async def get_system_info() -> dict:
         "cpu_threads": cpu_threads,
         "os_info": os_info,
         "total_memory": total_memory,
-        "disk_usage": f"{usage_percent:.1f}% of {total_space:.2f}GB",
+        "disks": disks,
         "logged_in_users": logged_in_users,
         "memory_usage": f"{mem_usage_percent:.1f}%",
         "net_ifs": net_ifs,
@@ -586,8 +651,12 @@ class colors:
     inverse = "\033[7m"
     uninverse = "\033[27m"
 
+    # Accent
+    accent = okblue
+
 
 async def main() -> None:
+    global tix
     info_task = get_system_info()
     services_task = count_failed_systemd()
     updates_task = get_updates()
@@ -600,35 +669,39 @@ async def main() -> None:
     system_info = await info_task
     msg = []
 
+    acctop = colors.accent if colors.accent != colors.okblue else colors.yellow_t
     msg.append(
-        f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})\n"
+        f"{acctop if os.geteuid() else colors.red_t}{colors.bold}Welcome to BredOS{colors.endc} ({system_info['os_info']})\n"
     )
     msg.append(
-        f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/\n"
+        f"{acctop if os.geteuid() else colors.red_t}{colors.bold}\n*{colors.endc} Documentation:  https://wiki.bredos.org/\n"
     )
     msg.append(
-        f"{colors.yellow_t if os.geteuid() else colors.red_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n\n"
+        f"{acctop if os.geteuid() else colors.red_t}{colors.bold}*{colors.endc} Support:        https://discord.gg/beSUnWGVH2\n\n"
     )
 
+    msg.append(
+        f"        {colors.bland_t}System Info as of {datetime.now().strftime('%a %d @ %H:%M:%S')}{colors.endc}\n"
+    )
     device_str = ""
     if device is not None:
-        device_str += f"{colors.okblue if os.geteuid() else colors.red_t}Device:{colors.endc} {device}"
+        device_str += f"{colors.accent if os.geteuid() else colors.red_t}Device:{colors.endc} {device}"
 
-    hostname_str = f"{colors.okblue if os.geteuid() else colors.red_t}Hostname:{colors.endc} {system_info['hostname']}"
+    hostname_str = f"{colors.accent if os.geteuid() else colors.red_t}Hostname:{colors.endc} {system_info['hostname']}"
 
-    uptime_str = f"{colors.okblue if os.geteuid() else colors.red_t}Uptime:{colors.endc} {system_info['uptime']}"
-    logged_str = f"{colors.okblue if os.geteuid() else colors.red_t}Users logged in:{colors.endc} {system_info['logged_in_users']}"
+    uptime_str = f"{colors.accent if os.geteuid() else colors.red_t}Uptime:{colors.endc} {system_info['uptime']}"
+    logged_str = f"{colors.accent if os.geteuid() else colors.red_t}Users logged in:{colors.endc} {system_info['logged_in_users']}"
 
-    cpu_str = f"{colors.okblue if os.geteuid() else colors.red_t}CPU:{colors.endc} {system_info['cpu_model']} ({system_info['cpu_count']}c, {system_info['cpu_threads']}t)"
-    load_str = f"{colors.okblue if os.geteuid() else colors.red_t}System load:{colors.endc} {system_info['system_load']}"
+    cpu_str = f"{colors.accent if os.geteuid() else colors.red_t}CPU:{colors.endc} {system_info['cpu_model']} ({system_info['cpu_count']}c, {system_info['cpu_threads']}t)"
+    load_str = f"{colors.accent if os.geteuid() else colors.red_t}System load:{colors.endc} {system_info['system_load']}"
 
-    memory_str = f"{colors.okblue if os.geteuid() else colors.red_t}Memory:{colors.endc} {system_info['memory_usage']} of {system_info['total_memory']} used"
+    memory_str = f"{colors.accent if os.geteuid() else colors.red_t}Memory:{colors.endc} {system_info['memory_usage']} of {system_info['total_memory']} used"
 
     swap_str = ""
     upd_str = ""
 
     if system_info["swap_usage"] is not None:
-        swap_str = f"{colors.okblue if os.geteuid() else colors.red_t}Swap usage:{colors.endc} {system_info['swap_usage']}"
+        swap_str = f"{colors.accent if os.geteuid() else colors.red_t}Swap usage:{colors.endc} {system_info['swap_usage']}"
 
     collumns = max(len(device_str), len(uptime_str), len(cpu_str), len(memory_str))
 
@@ -651,18 +724,47 @@ async def main() -> None:
         msg.append(seperator(memory_str, collumns))
     msg.append(swap_str + "\n")
 
-    usage_str = f"{colors.okblue if os.geteuid() else colors.red_t}Usage of /:{colors.endc} {system_info['disk_usage']}"
-    msg.append(usage_str)
-    splitter = True
-    last = usage_str
+    splitter = False
+    last = " "
+
     for netname, ip in system_info["net_ifs"].items():
         if splitter:
             msg.append(seperator(last, collumns))
-        last = f"{colors.okblue if os.geteuid() else colors.red_t}{netname}:{colors.endc} {ip}"
+        last = f"{colors.accent if os.geteuid() else colors.red_t}{netname}:{colors.endc} {ip}"
         msg.append(last)
         if splitter:
             msg.append("\n")
         splitter = not splitter
+
+    if not hush_disks:
+        human_readable = lambda b: (
+            lambda u=["B", "KB", "MB", "GB", "TB", "PB", "EB"]: (
+                i := max(0, min(len(u) - 1, (b.bit_length() - 1) // 10)),
+                f"{b/1024**i:.1f}{u[i]}",
+            )[1]
+        )()
+
+        disks = sorted(list(system_info["disks"].keys()))
+        if "Usage of /" in disks:
+            disks.insert(0, disks.pop(disks.index("Usage of /")))
+
+        for disk in disks:
+            if len(disk) > 15:
+                if splitter:
+                    msg.append("\n")
+                    splitter = False
+            if splitter:
+                msg.append(seperator(last, collumns))
+            dstr = (
+                str(system_info["disks"][disk][0])
+                + "% of "
+                + human_readable(system_info["disks"][disk][1])
+            )
+            last = f"{colors.accent if os.geteuid() else colors.red_t}{disk}:{colors.endc} {dstr}"
+            msg.append(last)
+            if splitter:
+                msg.append("\n")
+            splitter = not splitter
 
     if splitter:
         msg.append("\n")
@@ -697,7 +799,7 @@ async def main() -> None:
             msg += ["Failed to fetch news.", "\n", "\n"]
 
     show_url = False
-    if not hush_disks:
+    if not hush_smart:
         if isinstance(updates[4], dict):
             for drive in updates[4].keys():
                 state = updates[4][drive]
@@ -731,7 +833,7 @@ async def main() -> None:
         msg.append("\n")
     if not services["total"]:
         msg.append(
-            f"{colors.bold}{colors.green_t}System is operating normally.{colors.endc}\n"
+            f"{colors.bold}{colors.accent if colors.accent != colors.okblue else colors.green_t}System is operating normally.{colors.endc}\n"
         )
     else:
         for i in services["breakdown"].keys():
@@ -745,7 +847,34 @@ async def main() -> None:
                     f'{colors.bold}{colors.yellow_t}{n}{colors.endc} services report status {colors.bold}{colors.yellow_t}"{i}"{colors.endc}\n'
                 )
 
-    msg.append(f"\n{colors.bland_t}[Press any key to enter the shell]{colors.endc}")
+    prompt = (
+        "Press any key to enter the shell --- " if os.geteuid() else "CAUTION -!!- "
+    )
+    width = max(
+        len(ansi_re.sub("", subline)) for line in msg for subline in line.splitlines()
+    )
+    repeated = prompt * ((width // len(prompt)) + 3)
+
+    scroll_start = tix % len(prompt)
+    scrolled = repeated[scroll_start : scroll_start + width]
+
+    accent_width = 10
+    cycle_len = width - accent_width + 1
+
+    # Accent slides LEFT to RIGHT over the window as tix increases
+    pos = tix * 3 % cycle_len
+
+    inner = (
+        scrolled[:pos]
+        + (colors.accent if os.geteuid() else colors.error)
+        + scrolled[pos : pos + accent_width]
+        + colors.bland_t
+        + scrolled[pos + accent_width :]
+    )
+
+    msg.append(f"{colors.bland_t}[ {inner} ]{colors.endc}")
+    tix += 1
+
     refresh_lines(msg)
 
 
@@ -781,7 +910,7 @@ async def loop_main() -> None:
             if dr != []:
                 buf = os.read(fd, 4096).decode(errors="ignore")
                 if (
-                    buf.isalnum() or len(buf) == 3 or ord(buf) == 4
+                    buf.isalnum() or len(buf) == 3 or ord(buf) in [4, 12]
                 ) and not screensaver_mode:
                     # Do not inject if not a alphanum / Ctrl-D / Arrow key
                     try:
@@ -790,7 +919,23 @@ async def loop_main() -> None:
                     except:  # Injection failed, just exit.
                         pass
                 handle_exit()
-            await asyncio.sleep(0.04)
+            await asyncio.sleep(0.005)
+
+
+Accent = None
+
+newsrc_path = os.path.expanduser("~/.newsrc")
+if os.path.isfile(newsrc_path):
+    with open(newsrc_path) as f:
+        exec(f.read(), globals())
+
+
+# Inject accent
+try:
+    if Accent is not None and isinstance(Accent, str):
+        setattr(colors, "accent", Accent)
+except:
+    pass
 
 
 if __name__ == "__main__":

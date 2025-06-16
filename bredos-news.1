@@ -1,0 +1,48 @@
+.TH BREDOS-NEWS 1 "June 2025" "BredOS"
+.SH NAME
+bredos-news \- A news fetch utility that functions as a neofetch-style monitor and terminal greeter
+.SH SYNOPSIS
+.B bredos-news
+.RB [ \-s ]
+.SH DESCRIPTION
+\fBbredos-news\fR is a BredOS utility that shows user-facing system notifications such as software updates, disk attachments, and SMART health alerts. It is designed to be simple, silent when not needed, and optionally used as a terminal screensaver.
+
+By default, it runs in interactive mode and displays available news items unless explicitly hushed via config files.
+
+.SH OPTIONS
+.TP
+.BR \-s
+Screensaver mode. Suitable for embedding into graphical session managers or idle-time utilities. May alter formatting or animation behavior.
+
+.SH HUSH FILES
+The presence of specific hush files in the user's home directory suppresses certain types of messages.
+
+.TP
+.I ~/.hush_news
+Suppresses all output. When present, \fBbredos-news\fR does nothing.
+
+.TP
+.I ~/.hush_updates
+Suppresses display of software updates.
+
+.TP
+.I ~/.hush_disks
+Suppresses listing of storage devices.
+
+.TP
+.I ~/.hush_smart
+Suppresses reporting of SMART health problems.
+
+.SH FILES
+.TP
+\fI~/.hush_news\fR
+.TP
+\fI~/.hush_updates\fR
+.TP
+\fI~/.hush_disks\fR
+.TP
+\fI~/.hush_smart\fR
+User-level hush files to disable specific categories of output.
+
+.SH AUTHOR
+Bill Sideris <bill88t@bredos.org>
