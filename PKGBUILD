@@ -15,8 +15,8 @@ depends=('python' 'python-requests' 'python-psutil' 'python-pyinotify' 'smartmon
 optdepends=('pacman-contrib: Show updatable packages' 'yay: Check for updatable development packages')
 
 source=('99-bredos-news.sh'
-        'bredos-news.py'
-        'bredos-news-update-watcher.py'
+        'client.py'
+        'server.py'
         'bredos-news-update.service'
         'bredos-news.1')
 sha256sums=('SKIP'
