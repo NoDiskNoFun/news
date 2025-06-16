@@ -56,6 +56,9 @@ last_lines = []
 last_size = terminal_size()
 ansi_re = re.compile(r"\x1b\[([0-9,A-Z]{1,2}(;[0-9]{1,2})?(;[0-9]{3})?)?[m|K]?")
 tix = 0
+accent_dir = 1
+_nansi = {}
+_nansi_order = []
 
 
 def refresh_lines(new_lines: list[str]) -> None:
@@ -87,6 +90,7 @@ def refresh_lines(new_lines: list[str]) -> None:
 
     if physical_lines == last_lines:
         return
+
     new_physical_lines = len(physical_lines)
 
     # Move up N == printed_lines
@@ -656,10 +660,6 @@ class colors:
     accent2 = yellow_t
 
 
-_nansi = {}
-_nansi_order = []
-
-
 def nansi(inpt: str) -> str:
     if "\033" not in inpt:
         return inpt.replace("\n", "")
@@ -685,8 +685,44 @@ def nansi(inpt: str) -> str:
     return result
 
 
+def animation() -> str:
+    global awidth, tix, accent_dir
+    prompt = (
+        "Press any key to enter the shell --- " if os.geteuid() else "CAUTION -!!- "
+    )
+    repeated = prompt * ((awidth // len(prompt)) + 3)
+
+    scroll_start = tix % len(prompt)
+    scrolled = repeated[scroll_start : scroll_start + awidth]
+
+    accent_width = 10
+    cycle_len = awidth - accent_width + 1  # valid start positions for accent
+
+    # Total steps for a full ping-pong cycle
+    total_steps = 2 * (cycle_len - 1)
+
+    step = tix * 3 % total_steps
+
+    # Ping-pong motion calculation (no changes to `tix`)
+    if step >= cycle_len:
+        pos = total_steps - step  # moving left
+    else:
+        pos = step  # moving right
+
+    inner = (
+        scrolled[:pos]
+        + (colors.accent if os.geteuid() else colors.error)
+        + scrolled[pos : pos + accent_width]
+        + colors.bland_t
+        + scrolled[pos + accent_width :]
+    )
+
+    tix += 1
+    return f"{colors.bland_t}[ {inner} ]{colors.endc}"
+
+
 async def main() -> None:
-    global tix
+    global awidth
     info_task = get_system_info()
     services_task = count_failed_systemd()
     updates_task = get_updates()
@@ -883,35 +919,26 @@ async def main() -> None:
                     f'{colors.bold}{colors.yellow_t}{n}{colors.endc} services report status {colors.bold}{colors.yellow_t}"{i}"{colors.endc}\n'
                 )
 
-    prompt = (
-        "Press any key to enter the shell --- " if os.geteuid() else "CAUTION -!!- "
-    )
-    width = (
+    awidth = (
         max(len(nansi(subline)) for line in msg for subline in line.splitlines()) + 4
     )
-    repeated = prompt * ((width // len(prompt)) + 3)
-
-    scroll_start = tix % len(prompt)
-    scrolled = repeated[scroll_start : scroll_start + width]
-
-    accent_width = 10
-    cycle_len = width - accent_width + 1
-
-    # Accent slides LEFT to RIGHT over the window as tix increases
-    pos = tix * 3 % cycle_len
-
-    inner = (
-        scrolled[:pos]
-        + (colors.accent if os.geteuid() else colors.error)
-        + scrolled[pos : pos + accent_width]
-        + colors.bland_t
-        + scrolled[pos + accent_width :]
-    )
-
-    msg.append(f"{colors.bland_t}[ {inner} ]{colors.endc}")
-    tix += 1
+    msg.append(animation())
 
     refresh_lines(msg)
+
+
+async def delay(duration: float) -> None:
+    loop = asyncio.get_running_loop()
+    evt = asyncio.Event()
+    loop.call_later(duration, evt.set)
+    await evt.wait()
+
+
+async def suspend(until: float) -> None:
+    while until > monotonic():
+        stdout.write(f"\033[1F\033[2K{animation()}\n")
+        stdout.flush()
+        await delay(0.1)
 
 
 async def loop_main() -> None:
@@ -939,23 +966,34 @@ async def loop_main() -> None:
 
     signal.signal(signal.SIGINT, handle_exit)
 
-    while True:
-        await main()
-        for _ in range(20):
-            dr, _, _ = select.select([stdin], [], [], 0)
-            if dr != []:
-                buf = os.read(fd, 4096).decode(errors="ignore")
-                if (
-                    buf.isalnum() or len(buf) == 3 or ord(buf) in [4, 12]
-                ) and not screensaver_mode:
-                    # Do not inject if not a alphanum / Ctrl-D / Arrow key
-                    try:
-                        for ch in buf:
-                            fcntl.ioctl(stdin, termios.TIOCSTI, ch.encode())
-                    except:  # Injection failed, just exit.
-                        pass
-                handle_exit()
-            await asyncio.sleep(0.005)
+    try:
+        while True:
+            stamp = monotonic()
+            await main()
+            for _ in range(20):
+                dr, _, _ = select.select([stdin], [], [], 0)
+                if dr != []:
+                    buf = os.read(fd, 4096).decode(errors="ignore")
+                    if (
+                        buf.isalnum() or len(buf) > 2 or ord(buf) in [4, 12]
+                    ) and not screensaver_mode:
+                        # Do not inject if not a alphanum / Ctrl-D / Arrow key
+                        try:
+                            for ch in buf:
+                                fcntl.ioctl(stdin, termios.TIOCSTI, ch.encode())
+                        except:  # Injection failed, just exit.
+                            pass
+                    handle_exit()
+
+            await suspend(stamp + 0.25)
+    except Exception as err:
+        print("\nUNHANDLED EXCEPTION!\n")
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        if screensaver_mode:
+            stdout.write("\033[?1049l")
+        stdout.write("\r\033[K\033[1F\033[K\033[?25h\0")
+        stdout.flush()
+        raise err
 
 
 Accent = None
