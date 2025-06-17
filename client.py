@@ -69,7 +69,10 @@ CACHE_FILE = "/tmp/news_cache.json"
 printed_lines = 0
 last_lines = []
 last_size = terminal_size()
-ansi_re = re.compile(r"\x1b\[([0-9,A-Z]{1,2}(;[0-9]{1,2})?(;[0-9]{3})?)?[m|K]?")
+ansi_re = re.compile(
+    r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\)|P[^\x1B]*\x1B\\|_[^\x1B]*\x1B\\|\^[^\x1B]*\x1B\\|X.)",
+    re.DOTALL,
+)
 tix = 0
 accent_dir = 1
 _nansi = {}
