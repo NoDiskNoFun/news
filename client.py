@@ -12,13 +12,13 @@ try:
     ) and not screensaver_mode:
         exit(0)
 
-    # Exit if for some fuckshit reason pacman called us.
+    # Exit if for some fuckshit reason one of these called us.
     pid = os.getpid()
     while pid > 1:
         try:
             with open(f"/proc/{pid}/comm") as f:
                 name = f.read().strip()
-            if name in ["pacman", "yay"]:
+            if name in ["pacman", "yay", "makepkg"]:
                 exit(0)
             with open(f"/proc/{pid}/status") as f:
                 pid = int(
