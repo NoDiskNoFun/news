@@ -8,9 +8,24 @@ try:
     screensaver_mode = "-s" in argv[1:]
     hush_login_path = os.path.expanduser("~/.hush_login")
     if (
-        os.path.isfile(hush_login_path) or (not stdin.isatty())  # Hushed  # No stdin
+        os.path.isfile(hush_login_path) or (not stdin.isatty())
     ) and not screensaver_mode:
         exit(0)
+
+    # Exit if for some fuckshit reason pacman called us.
+    pid = os.getpid()
+    while pid > 1:
+        try:
+            with open(f"/proc/{pid}/comm") as f:
+                name = f.read().strip()
+            if name in ["pacman", "yay"]:
+                exit(0)
+            with open(f"/proc/{pid}/status") as f:
+                pid = int(
+                    next(line for line in f if line.startswith("PPid:")).split()[1]
+                )
+        except Exception:
+            break
 
     path = f"/tmp/news_run_{os.getuid()}.txt"
     try:
@@ -670,14 +685,13 @@ def nansi(inpt: str) -> str:
         _nansi_order.append(inpt)
         return _nansi[inpt]
 
-    # Compute result
     result = ansi_re.sub("", inpt).replace("\n", "")
 
     # Add to cache
     _nansi[inpt] = result
     _nansi_order.append(inpt)
 
-    # Evict least recently used if over capacity
+    # Evict LRU if over capacity
     if len(_nansi_order) > 50:
         oldest = _nansi_order.pop(0)
         del _nansi[oldest]
@@ -708,6 +722,9 @@ def animation() -> str:
         pos = total_steps - step  # moving left
     else:
         pos = step  # moving right
+
+    if (not scroll_start) and not pos:
+        tix = 0
 
     inner = (
         scrolled[:pos]
@@ -938,7 +955,7 @@ async def suspend(until: float) -> None:
     while until > monotonic():
         stdout.write(f"\033[1F\033[2K{animation()}\n")
         stdout.flush()
-        await delay(0.1)
+        await delay(Time_Tick)
 
 
 async def loop_main() -> None:
@@ -965,6 +982,8 @@ async def loop_main() -> None:
         os._exit(0)
 
     signal.signal(signal.SIGINT, handle_exit)
+    signal.signal(signal.SIGQUIT, handle_exit)
+    signal.signal(signal.SIGTSTP, handle_exit)
 
     try:
         while True:
@@ -985,7 +1004,7 @@ async def loop_main() -> None:
                             pass
                     handle_exit()
 
-            await suspend(stamp + 0.25)
+            await suspend(stamp + Time_Refresh)
     except Exception as err:
         print("\nUNHANDLED EXCEPTION!\n")
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -996,8 +1015,17 @@ async def loop_main() -> None:
         raise err
 
 
+# .newsrc proper options
+
 Accent = None
 Accent_Secondary = None
+
+Hush_Updates = None
+Hush_Disks = None
+Hush_Smart = None
+Time_Tick = 0.1
+Time_Refresh = 0.25
+
 
 newsrc_path = os.path.expanduser("~/.newsrc")
 if os.path.isfile(newsrc_path):
@@ -1005,10 +1033,17 @@ if os.path.isfile(newsrc_path):
         try:
             exec(f.read(), globals())
         except KeyboardInterrupt:
-            print("What the hell is your config doing?")
+            print(
+                "Ctrl-C detected while loading `~/.newsrc`, experiencing severe brain damage."
+            )
         except:
             print("Exception while loading `~/.newsrc`, ignoring.")
-
+else:  # Install default template
+    try:
+        with open(newsrc_path, "w") as f:
+            pass
+    except:
+        pass
 
 # Inject settings
 try:
@@ -1023,5 +1058,21 @@ try:
 except:
     pass
 
+if Hush_Updates is not None and isinstance(Hush_Updates, bool):
+    hush_updates = Hush_Updates
+
+if Hush_Disks is not None and isinstance(Hush_Disks, bool):
+    hush_disks = Hush_Disks
+
+if Hush_Smart is not None and isinstance(Hush_Smart, bool):
+    hush_smart = Hush_Smart
+
+if not (isinstance(Time_Tick, float) or isinstance(Time_Tick, int)):
+    Time_Tick = 0.1
+
+if not (isinstance(Time_Refresh, float) or isinstance(Time_Refresh, int)):
+    Time_Refresh = 0.25
+
+# Main event loop
 if __name__ == "__main__":
     asyncio.run(loop_main())
