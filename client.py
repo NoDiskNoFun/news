@@ -1044,7 +1044,18 @@ if os.path.isfile(newsrc_path):
 else:  # Install default template
     try:
         with open(newsrc_path, "w") as f:
-            pass
+            f.write(
+                "# BredOS-News Configuration\n"
+                + "\n"
+                + '# Accent = "\\033[38;5;129m"\n'
+                + '# Accent_Secondary = "\\033[38;5;104m"\n'
+                + "\n"
+                + "# Hush_Updates = False\n"
+                + "# Hush_Disks = False\n"
+                + "# Hush_Smart = False\n"
+                + "# Time_Tick = 0.1\n"
+                + "# Time_Refresh = 0.25\n\n"
+            )
     except:
         pass
 
