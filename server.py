@@ -1,5 +1,5 @@
 #!/usr/bin/env -S python3 -u
-import os, re, json, time, glob, sys, io
+import os, re, json, time, glob, sys, io, pwd
 import socket, subprocess, pyinotify, requests
 from datetime import datetime
 
@@ -180,10 +180,24 @@ def get_updates():
 
 
 def get_devel_updates():
-    res = run_command(["yay", "-Qua", "--devel"])
-    if res:
-        res = res[1:]
-    return len(res) if isinstance(res, list) else res
+    users_with_yay = []
+
+    # Find all users with yay cache
+    for p in pwd.getpwall():
+        homedir = p.pw_dir
+        yay_cache = os.path.join(homedir, ".cache/yay")
+        if os.path.isdir(yay_cache):
+            users_with_yay.append((p.pw_name, homedir))
+
+    update_set = set()
+
+    # Step 2: Run yay -Qua --devel for each user
+    for username, _ in users_with_yay:
+        out = run_command(["sudo", "-u", username, "yay", "-Qua", "--devel"])
+        if isinstance(out, list):
+            update_set.update(out)
+
+    return len(update_set)  # Return total number of unique updates
 
 
 def fetch_news() -> str | bool:
