@@ -75,12 +75,32 @@ ansi_re = re.compile(
 )
 tix = 0
 accent_dir = 1
+amsall = False
 _nansi = {}
 _nansi_order = []
 
 
+def phy_lines(lines: list[str]) -> list:
+    res = []
+    buf = ""
+    for chunk in lines:
+        buf += chunk
+        while True:
+            nl_pos = buf.find("\n")
+            if nl_pos == -1:
+                break
+            # Append substring up to newline (excluding '\n')
+            res.append(buf[:nl_pos])
+            buf = buf[nl_pos + 1 :]
+
+    # Append remainder if any (no trailing newline)
+    if buf:
+        res.append(buf)
+    return res
+
+
 def refresh_lines(new_lines: list[str]) -> None:
-    global printed_lines, last_lines, last_size, tix
+    global printed_lines, last_lines, last_size, tix, awidth
     curterm = terminal_size()
     if curterm != last_size:
         stdout.write("\033[2J\033[3J\033[H")
@@ -92,19 +112,7 @@ def refresh_lines(new_lines: list[str]) -> None:
     physical_lines = []
     buf = ""
 
-    for chunk in new_lines:
-        buf += chunk
-        while True:
-            nl_pos = buf.find("\n")
-            if nl_pos == -1:
-                break
-            # Append substring up to newline (excluding '\n')
-            physical_lines.append(buf[:nl_pos])
-            buf = buf[nl_pos + 1 :]
-
-    # Append remainder if any (no trailing newline)
-    if buf:
-        physical_lines.append(buf)
+    physical_lines = phy_lines(new_lines)
 
     if physical_lines == last_lines:
         return
@@ -117,14 +125,12 @@ def refresh_lines(new_lines: list[str]) -> None:
 
     # Terminal size checks
     if (curterm[1] < new_physical_lines + 1) or (
-        curterm[0]
-        < max(
-            len(re.sub(r"\x1b\[[0-9;]*m", "", line).rstrip()) for line in physical_lines
-        )
+        curterm[0] < max(len(ansi_re.sub("", line)) for line in physical_lines)
     ):
+        awidth = terminal_size()[0]
         physical_lines = [
             physical_lines[0],
-            f"{colors.bland_t}[Terminal too small -- Press any key to enter the shell]{colors.endc}",
+            animation(),
         ]
         new_physical_lines = 2
 
@@ -688,7 +694,7 @@ def nansi(inpt: str) -> str:
         _nansi_order.append(inpt)
         return _nansi[inpt]
 
-    result = ansi_re.sub("", inpt).replace("\n", "")
+    result = ansi_re.sub("", inpt).rstrip().replace("\n", "")
 
     # Add to cache
     _nansi[inpt] = result
@@ -703,14 +709,16 @@ def nansi(inpt: str) -> str:
 
 
 def animation() -> str:
-    global awidth, tix, accent_dir
+    global awidth, asmall, tix, accent_dir
     prompt = (
         "Press any key to enter the shell --- " if os.geteuid() else "CAUTION -!!- "
     )
-    repeated = prompt * ((awidth // len(prompt)) + 3)
+    if asmall:
+        prompt = "Terminal too small -- " + prompt
+    repeated = prompt * (((awidth - 4) // len(prompt)) + 3)
 
     scroll_start = tix % len(prompt)
-    scrolled = repeated[scroll_start : scroll_start + awidth]
+    scrolled = repeated[scroll_start : scroll_start + (awidth - 4)]
 
     accent_width = 10
     cycle_len = awidth - accent_width + 1  # valid start positions for accent
@@ -742,7 +750,7 @@ def animation() -> str:
 
 
 async def main() -> None:
-    global awidth
+    global awidth, asmall
     info_task = get_system_info()
     services_task = count_failed_systemd()
     updates_task = get_updates()
@@ -798,6 +806,7 @@ async def main() -> None:
         len(nansi(uptime_str)),
         len(nansi(cpu_str)),
         len(nansi(memory_str)),
+        len(nansi(swap_str)),
     )
 
     msg.append(device_str)
@@ -866,13 +875,13 @@ async def main() -> None:
     if not hush_updates:
         if isinstance(updates, list):
             if updates[0] and not updates[1]:
-                upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0]} updates available.{colors.endc}\n"
+                upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0]} updates available.{colors.endc} "
             elif updates[0] and updates[1]:
                 upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[0] + updates[1]} updates available, of which {updates[1]} are development packages.{colors.endc}\n"
             elif updates[1]:
                 upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[1]} development updates available.{colors.endc}\n"
             else:
-                upd_str = f"\n{colors.accent2 if colors.accent2 != colors.yellow_t else colors.green_t}You are up to date!{colors.endc}\n"
+                upd_str = f"\n{colors.accent2 if colors.accent2 != colors.yellow_t else colors.green_t}You are up to date!{colors.endc} "
             for i in updates[3]:
                 upd_str += i + "\n"
         elif isinstance(updates, str):
@@ -939,9 +948,8 @@ async def main() -> None:
                     f'{colors.bold}{colors.yellow_t}{n}{colors.endc} services report status {colors.bold}{colors.yellow_t}"{i}"{colors.endc}\n'
                 )
 
-    awidth = (
-        max(len(nansi(subline)) for line in msg for subline in line.splitlines()) + 4
-    )
+    awidth = max(len(nansi(line)) for line in phy_lines(msg))
+    asmall = awidth > terminal_size()[0]
     msg.append(animation())
 
     refresh_lines(msg)
