@@ -186,6 +186,7 @@ sbc_list = [
     "Orange Pi 5 Ultra",
     "Orange Pi 5B",
     "Orange Pi CM5",
+    "Orange Pi R2S",
     "Orange Pi RV",
     "Orange Pi RV 2",
     "RK3588 CoolPi CM5 EVB Board",
