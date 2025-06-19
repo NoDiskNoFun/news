@@ -60,6 +60,9 @@ except KeyboardInterrupt:
 def terminal_size() -> tuple:
     try:
         size = shutil.get_terminal_size(fallback=(999, 999))
+        res = [size.columns, size.lines]
+        if (not res[0]) or (not res[1]):
+            return 999, 999
         return size.columns, size.lines
     except Exception:
         return 999, 999
@@ -725,7 +728,7 @@ def animation() -> str:
     cycle_len = awidth - accent_width + 1  # valid start positions for accent
 
     # Total steps for a full ping-pong cycle
-    total_steps = 2 * (cycle_len - 1)
+    total_steps = max(2 * (cycle_len - 1), 2)
 
     step = tix * 3 % total_steps
 

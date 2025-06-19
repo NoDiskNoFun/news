@@ -1,7 +1,7 @@
 # Maintainer: Bill Sideris <bill88t@bredos.org>
 
 pkgname=bredos-news
-pkgver=1.15.4
+pkgver=1.15.5
 pkgrel=1
 pkgdesc='BredOS news and system information utility'
 arch=('any')
@@ -22,7 +22,13 @@ source=(
   'server-launcher.sh'
 )
 
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('35c853b9052b116422600d2083106fa0e269a74882c815169550e234c942ef4d'
+            '29b80b2505332753326ed585f09f1779aad1b20dc9b821d2a2a952acfb4f5077'
+            '5dfa12531be0c234337321fb1f77a2569390f400c63888b02b45f1acbbf9f7e3'
+            'c63d70907e9a2b1b96c4d618440ad10612822a8f18de2853af0a9402a868ec26'
+            '0c8f13369aeedc0b2738f296f9c35e950e6043f28169c958762739e105e6a10e'
+            'caee1037cb370a8e0b0c9b83a6cc2e6eca78fed16783833060cc10d5915fd6e4'
+            '73ec248f7f8f9a09dd82cbda77df9be8bd4f35b1d06c1cae82a4f784510a7c0e')
 
 build() {
     cd "$srcdir"
