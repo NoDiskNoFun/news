@@ -1,4 +1,4 @@
-BredOS System Configurator released!
-More info: https://wiki.bredos.org/en/blog/2025/06/07
+linux-firmware upgrade requires manual intervention!!!
+More info: https://wiki.bredos.org/en/blog/2025/06/22
 
-- bill88t, the Domesticated Federal Pancake
+- Panda, BredOS team lead
