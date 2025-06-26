@@ -193,9 +193,17 @@ def get_devel_updates():
 
     # Step 2: Run yay -Qua --devel for each user
     for username, _ in users_with_yay:
-        out = run_command(["sudo", "-u", username, "yay", "-Qua", "--devel"])
-        if isinstance(out, list):
-            update_set.update(out)
+        retries = 0
+        while retries < 3:
+            try:
+                out = run_command(["sudo", "-u", username, "yay", "-Qua", "--devel"])
+                if isinstance(out, list):
+                    update_set.update(out)
+                    break
+                else:
+                    raise Exception
+            except:
+                retries += 1
 
     return len(update_set)  # Return total number of unique updates
 

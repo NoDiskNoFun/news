@@ -81,6 +81,23 @@ accent_dir = 1
 amsall = False
 _nansi = {}
 _nansi_order = []
+_last_run_data = {}
+
+
+def once(func):
+    tag = func.__name__
+
+    def wrapper(*args, **kwargs):
+        entry = _last_run_data.get(tag)
+
+        if entry:
+            return entry
+
+        result = func(*args, **kwargs)
+        _last_run_data[tag] = result
+        return result
+
+    return wrapper
 
 
 def phy_lines(lines: list[str]) -> list:
@@ -263,6 +280,7 @@ sbc_list = [
 ]
 
 
+@once
 def hw_impl_id_to_vendor(impl_id: int) -> str:
     vendors = {
         0x41: "ARM",
@@ -288,6 +306,7 @@ def hw_impl_id_to_vendor(impl_id: int) -> str:
     return vendors.get(impl_id, "Unknown")
 
 
+@once
 def arm_part_id_to_name(part_id: int) -> str:
     arm_parts = {
         0x810: "ARM810",
@@ -365,6 +384,61 @@ def arm_part_id_to_name(part_id: int) -> str:
         0xD87: "Cortex-A725",
     }
     return arm_parts.get(part_id, "Unknown")
+
+
+@once
+def get_sys_id() -> tuple:
+    hostname = platform.node()
+    os_info = f"GNU/Linux {platform.release()} {platform.machine()}"
+
+    cpu_model = None
+    vendor = None
+    part_name = None
+    cpu_model = None
+    cpu_implementer = None
+    cpu_part = None
+
+    with open("/proc/cpuinfo") as f:
+        cpuinfo = f.read().splitlines()
+
+    for line in cpuinfo:
+        if "cpu model" in line or "model name" in line:
+            cpu_model = line.split(":", 1)[1].strip()
+            break
+
+    if cpu_model is None:
+        cpu_implementer = None
+        cpu_part = None
+        for line in cpuinfo:
+            if "CPU implementer" in line:
+                cpu_implementer = int(line.split(":")[1].strip(), 16)
+            elif "CPU part" in line:
+                cpu_part = int(line.split(":")[1].strip(), 16)
+
+            if cpu_implementer is not None and cpu_part is not None:
+                break
+
+        vendor = hw_impl_id_to_vendor(cpu_implementer)
+        part_name = arm_part_id_to_name(cpu_part)
+
+        cpu_model = f"{vendor} {part_name}"
+
+    cpu_count = psutil.cpu_count(logical=False)
+    cpu_threads = psutil.cpu_count(logical=True)
+
+    mem = psutil.virtual_memory()
+    total_memory = f"{mem.total // (1024**2)} MB"
+
+    return (
+        hostname,
+        os_info,
+        cpu_model,
+        vendor,
+        part_name,
+        cpu_count,
+        cpu_threads,
+        total_memory,
+    )
 
 
 def get_active_ipv4_interfaces() -> dict:
@@ -449,8 +523,16 @@ def get_storage_usages() -> dict:
 
 
 async def get_system_info() -> dict:
-    hostname = platform.node()
-    os_info = f"GNU/Linux {platform.release()} {platform.machine()}"
+    (
+        hostname,
+        os_info,
+        cpu_model,
+        vendor,
+        part_name,
+        cpu_count,
+        cpu_threads,
+        total_memory,
+    ) = get_sys_id()
 
     uptime_seconds = int(psutil.boot_time())
     uptime = datetime.now() - datetime.fromtimestamp(uptime_seconds)
@@ -472,39 +554,6 @@ async def get_system_info() -> dict:
         uptime_str += f"{minutes} minutes"
     else:
         uptime_str += "seconds"
-
-    cpu_model = None
-
-    with open("/proc/cpuinfo") as f:
-        cpuinfo = f.read().splitlines()
-
-    for line in cpuinfo:
-        if "cpu model" in line or "model name" in line:
-            cpu_model = line.split(":", 1)[1].strip()
-            break
-
-    if cpu_model is None:
-        cpu_implementer = None
-        cpu_part = None
-        for line in cpuinfo:
-            if "CPU implementer" in line:
-                cpu_implementer = int(line.split(":")[1].strip(), 16)
-            elif "CPU part" in line:
-                cpu_part = int(line.split(":")[1].strip(), 16)
-
-            if cpu_implementer is not None and cpu_part is not None:
-                break
-
-        vendor = hw_impl_id_to_vendor(cpu_implementer)
-        part_name = arm_part_id_to_name(cpu_part)
-
-        cpu_model = f"{vendor} {part_name}"
-
-    cpu_count = psutil.cpu_count(logical=False)
-    cpu_threads = psutil.cpu_count(logical=True)
-
-    mem = psutil.virtual_memory()
-    total_memory = f"{mem.total // (1024**2)} MB"
 
     with open("/proc/loadavg") as f:
         load_avg = f.read().split()[0]
