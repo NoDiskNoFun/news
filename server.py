@@ -1,6 +1,7 @@
 #!/usr/bin/env -S python3 -u
 import os, re, json, time, glob, sys, io, pwd
 import socket, subprocess, pyinotify, requests
+import platform, tomllib
 from datetime import datetime
 
 # Rebind stdout/stderr to unbuffered UTF-8 streams for systemd
@@ -220,11 +221,34 @@ def fetch_news() -> str | bool:
         return False
 
 
-def write_cache(updates, devel_updates, news, smart) -> None:
+def fetch_upd_recommends() -> str:
+    try:
+        response = requests.get(
+            "https://raw.githubusercontent.com/BredOS/news/refs/heads/main/upd_recommends.toml",
+            timeout=5,
+        )
+        response.raise_for_status()
+        data = tomllib.loads(response.text)
+
+        arch = platform.machine().lower()
+        val = data.get(arch, "Unknown")
+
+        if isinstance(val, str):
+            return val
+        elif isinstance(val, int):
+            return {0: "Yes", 1: "Maybe", 2: "No", 3: "F*ck NO"}.get(val, "Unknown")
+        else:
+            return "Unknown"
+    except:
+        return "Unknown"
+
+
+def write_cache(updates, devel_updates, news, upd_recommends, smart) -> None:
     payload = {
         "updates": updates,
         "devel_updates": devel_updates,
         "news": news,
+        "updrecommends": upd_recommends,
         "timestamp": int(time.time()),
         "smart": smart,
     }
@@ -257,11 +281,12 @@ def check_and_update() -> bool:
     updates = get_updates()
     devel = get_devel_updates()
     news = fetch_news()
+    upd_recommends = fetch_upd_recommends()
     smart = smart_health_report()
     if updates is None or devel is None:
         MUTEX_LOCK = False
         return False
-    write_cache(updates, devel, news, smart)
+    write_cache(updates, devel, news, upd_recommends, smart)
     MUTEX_LOCK = False
     return True
 
