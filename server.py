@@ -222,6 +222,7 @@ def fetch_news() -> str | bool:
 
 
 def fetch_upd_recommends() -> str:
+    val = "Unknown"
     try:
         response = requests.get(
             "https://raw.githubusercontent.com/BredOS/news/refs/heads/main/upd_recommends.toml",
@@ -231,16 +232,25 @@ def fetch_upd_recommends() -> str:
         data = tomllib.loads(response.text)
 
         arch = platform.machine().lower()
-        val = data.get(arch, "Unknown")
 
-        if isinstance(val, str):
+        try:
+            val = data[arch]["value"]
+
+            if isinstance(val, str):
+                return val
+            elif isinstance(val, int):
+                return {
+                    0: "\033[32mYes\033[0m",
+                    1: "\033[93mMaybe\033[0m",
+                    2: "\033[31mNo\033[0m",
+                    3: "\033[1m\033[91mF*ck NO\033[0m",
+                }.get(val, "\033[2;37mUnknown\033[0m")
+            else:
+                return val
+        except:
             return val
-        elif isinstance(val, int):
-            return {0: "Yes", 1: "Maybe", 2: "No", 3: "F*ck NO"}.get(val, "Unknown")
-        else:
-            return "Unknown"
     except:
-        return "Unknown"
+        return val
 
 
 def write_cache(updates, devel_updates, news, upd_recommends, smart) -> None:

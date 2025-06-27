@@ -191,6 +191,8 @@ sbc_list = [
     "HINLINK H88K",
     "Indiedroid Nova",
     "Khadas Edge2",
+    "Khadas VIM4",
+    "Khadas VIM 4",
     "Mekotronics R58 MiniPC (RK3588 MINIPC LP4x V1.0 BlueBerry Board)",
     "Mekotronics R58X (RK3588 EDGE LP4x V1.0 BlueBerry Board)",
     "Mekotronics R58X-4G (RK3588 EDGE LP4x V1.2 BlueBerry Board)",
@@ -662,6 +664,7 @@ async def get_updates():
             updates = data.get("updates")
             devel_updates = data.get("devel_updates")
             news = data.get("news")
+            updrecommends = data.get("updrecommends", "Unknown")
             timestamp = data.get("timestamp")
             smart = data.get("smart")
             msgs = []
@@ -676,6 +679,7 @@ async def get_updates():
                 updates,
                 devel_updates,
                 news,
+                updrecommends,
                 [f"{colors.bland_t}(Latest check was {ago}){colors.endc}"] + msgs,
                 smart,
             ]
@@ -935,8 +939,13 @@ async def main() -> None:
                 upd_str = f"\n{colors.bold}{colors.cyan_t}{updates[1]} development updates available.{colors.endc}\n"
             else:
                 upd_str = f"\n{colors.accent2 if colors.accent2 != colors.yellow_t else colors.green_t}You are up to date!{colors.endc} "
-            for i in updates[3]:
+            for i in updates[4]:
                 upd_str += i + "\n"
+            if updates[0] or updates[1]:
+                upd_str += (
+                    f"{colors.accent}Should you update:{colors.endc} {updates[3]}\n"
+                )
+
         elif isinstance(updates, str):
             upd_str = updates
 
@@ -954,9 +963,9 @@ async def main() -> None:
 
     show_url = False
     if not hush_smart:
-        if isinstance(updates[4], dict):
-            for drive in updates[4].keys():
-                state = updates[4][drive]
+        if isinstance(updates[5], dict):
+            for drive in updates[5].keys():
+                state = updates[5][drive]
                 if state == "WARN":
                     msg.append(
                         f'{colors.bold}{colors.yellow_t}Drive "{drive}" reliability compromised - Backup your data{colors.endc}\n'
