@@ -1,5 +1,4 @@
 Critical sudo priviledge escalation exploit!
-
 !!! UPDATE IMMEDIATELY !!!
 
  -\                 /-
