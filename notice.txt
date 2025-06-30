@@ -2,4 +2,8 @@ Critical sudo priviledge escalation exploit!
 
 !!! UPDATE IMMEDIATELY !!!
 
+ -\                 /-
+ -> `yay -Syu sudo` <-
+ -/                 \-
+
 - Rudimentary Pancake Assembler
