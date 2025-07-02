@@ -941,7 +941,7 @@ async def main() -> None:
                 upd_str = f"\n{colors.accent2 if colors.accent2 != colors.yellow_t else colors.green_t}You are up to date!{colors.endc} "
             for i in updates[4]:
                 upd_str += i + "\n"
-            if updates[0] or updates[1]:
+            if (updates[0] or updates[1]) and updates[3] != "Unknown":
                 upd_str += (
                     f"{colors.accent}Should you update:{colors.endc} {updates[3]}\n"
                 )
