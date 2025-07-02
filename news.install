@@ -1,10 +1,12 @@
 post_install() {
+    systemctl daemon-reexec
     systemctl daemon-reload
     systemctl enable --now bredos-news-update
 }
 
 post_upgrade() {
     systemctl enable bredos-news-update
+    systemctl daemon-reexec
     systemctl daemon-reload
     systemctl restart bredos-news-update
 }
