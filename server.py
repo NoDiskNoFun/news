@@ -236,9 +236,7 @@ def fetch_upd_recommends() -> str:
         try:
             val = data[arch]["value"]
 
-            if isinstance(val, str):
-                return val
-            elif isinstance(val, int):
+            if isinstance(val, int):
                 return {
                     0: "\033[32mYes\033[0m",
                     1: "\033[93mMaybe\033[0m",
