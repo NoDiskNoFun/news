@@ -1,7 +1,6 @@
-!!! UPDATE IMMEDIATELY - CRITICAL SUDO PRIVILEDGE EXPLOIT !!!
+Malware detected in AUR packages:
+`librewolf-fix-bin`, `firefox-patch-bin`
+and `zen-browser-patched-bin`.
 
- -\                /-
- -> `yay -Sy sudo` <-
- -/                \-
-
+Be careful of what you install from the AUR.
 - Rudimentary Pancake Assembler
