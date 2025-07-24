@@ -1,6 +1,3 @@
-Malware detected in AUR packages:
-`librewolf-fix-bin`, `firefox-patch-bin`
-and `zen-browser-patched-bin`.
+Now's a pretty good time to update.
 
-Be careful of what you install from the AUR.
 - Rudimentary Pancake Assembler
