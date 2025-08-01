@@ -1,7 +1,7 @@
 # Maintainer: Bill Sideris <bill88t@bredos.org>
 
 pkgname=bredos-news
-pkgver=1.17.1
+pkgver=1.17.2
 pkgrel=1
 pkgdesc='BredOS news and system information utility'
 arch=('any')
@@ -11,6 +11,7 @@ groups=(bredos)
 depends=('python' 'python-requests' 'python-psutil' 'python-pyinotify' 'smartmontools' 'mmc-utils-git' 'pacman-contrib')
 optdepends=('yay: Check for updatable development packages')
 makedepends=('cython' 'gcc' 'python')
+install=news.install
 
 source=(
   'client.py'

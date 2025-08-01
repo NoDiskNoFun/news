@@ -1,3 +1,4 @@
-Now's a pretty good time to update.
+*Sigh* More malware AUR packages were found.
+`chrome` `google-chrome-bin` `google-chrome-stable`
 
 - Rudimentary Pancake Assembler
