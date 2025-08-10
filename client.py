@@ -56,6 +56,11 @@ except KeyboardInterrupt:
 
     os._exit(0)
 
+def exit_on_buffer():
+    if select.select([stdin], [], [], 0)[0] != []:
+        os._exit(0)
+
+exit_on_buffer()
 
 def terminal_size() -> tuple:
     try:
@@ -1046,14 +1051,19 @@ async def loop_main() -> None:
     stdout.write("\033[?25l")
 
     def handle_exit(signum=None, frame=None) -> None:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-        if screensaver_mode:
-            stdout.write("\033[?1049l")
-        stdout.write("\r\033[K\033[1F\033[K\033[?25h\0")
-        stdout.flush()
-        path = f"/tmp/news_run_{os.getuid()}.txt"
-        with open(path, "w") as f:
-            f.write(str(int(time())))
+        try:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+            if screensaver_mode:
+                stdout.write("\033[?1049l")
+            stdout.write("\r\033[K\033[1F\033[K\033[?25h\0")
+            stdout.flush()
+            path = f"/tmp/news_run_{os.getuid()}.txt"
+            with open(path, "w") as f:
+                f.write(str(int(time())))
+        except KeyboardInterrupt:
+            pass
+        except:
+            pass
         os._exit(0)
 
     signal.signal(signal.SIGINT, handle_exit)
@@ -1078,7 +1088,6 @@ async def loop_main() -> None:
                         except:  # Injection failed, just exit.
                             pass
                     handle_exit()
-
             await suspend(stamp + Time_Refresh)
     except Exception as err:
         print("\nUNHANDLED EXCEPTION!\n")

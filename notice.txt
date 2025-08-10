@@ -1,4 +1,3 @@
-*Sigh* More malware AUR packages were found.
-`chrome` `google-chrome-bin` `google-chrome-stable`
+Hello from a coaxial modem!
 
 - Rudimentary Pancake Assembler
