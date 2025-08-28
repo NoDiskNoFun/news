@@ -17,7 +17,7 @@ CACHE_FILE = "/tmp/news_cache.json"
 WATCH_DIR = "/var/lib/pacman/"
 PACMAN_LOCK = WATCH_DIR + "db.lck"
 
-RETRY_DELAY = 10
+RETRY_DELAY = 8
 NORMAL_DELAY = 1800
 MAX_RETRIES = 20
 WATCHDOG_TIMEOUT = 5
@@ -103,6 +103,12 @@ def smart_health_report() -> dict:
     try:
         scan_output = subprocess.check_output(["smartctl", "--scan-open"], text=True)
         devices = [line.split()[0] for line in scan_output.splitlines()]
+        filtered_devs = []
+        for i in devices:
+            if i.startswith("/dev/bus/"):
+                filtered_devs.append(i)
+        for i in filtered_devs:
+            devices.remove(i)
     except subprocess.CalledProcessError as e:
         raise RuntimeError("Failed to scan for SMART devices") from e
 
