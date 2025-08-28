@@ -1,3 +1,4 @@
-Hello from a coaxial modem!
+Somehow VeraCrypt wasn't on ALARM repos.
+BredOS repos have it now. Thanks me later.
 
 - Rudimentary Pancake Assembler
