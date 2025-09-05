@@ -18,7 +18,7 @@ try:
         try:
             with open(f"/proc/{pid}/comm") as f:
                 name = f.read().strip()
-            if name in ["pacman", "yay", "makepkg"]:
+            if name in ["pacman", "yay", "makepkg", "ly-dm"]:
                 exit(0)
             with open(f"/proc/{pid}/status") as f:
                 pid = int(
@@ -26,6 +26,9 @@ try:
                 )
         except Exception:
             break
+
+    if "HUSH_NEWS" in os.environ and os.environ["HUSH_NEWS"] == "1":
+        exit(0)
 
     path = f"/tmp/news_run_{os.getuid()}.txt"
     try:
