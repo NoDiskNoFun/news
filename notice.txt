@@ -1,4 +1,7 @@
-Somehow VeraCrypt wasn't on ALARM repos.
-BredOS repos have it now. Thanks me later.
+Now a message from our sponsors
+Raid Shadow Lege-
 
-- Rudimentary Pancake Assembler
+Ooops, wrong message
+
+We're looking for testers for the new rk3588 experimental kernel!
+Contact @rippanda12 on Discord/Telegram or email <panda@bredos.org>
