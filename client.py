@@ -59,11 +59,14 @@ except KeyboardInterrupt:
 
     os._exit(0)
 
+
 def exit_on_buffer():
     if select.select([stdin], [], [], 0)[0] != []:
         os._exit(0)
 
+
 exit_on_buffer()
+
 
 def terminal_size() -> tuple:
     try:
@@ -86,7 +89,6 @@ ansi_re = re.compile(
 )
 tix = 0
 accent_dir = 1
-amsall = False
 _nansi = {}
 _nansi_order = []
 _last_run_data = {}
@@ -774,12 +776,12 @@ def nansi(inpt: str) -> str:
 
 
 def animation() -> str:
-    global awidth, asmall, tix, accent_dir
+    global awidth, tix, accent_dir
     prompt = (
-        "Press any key to enter the shell --- " if os.geteuid() else "CAUTION -!!- "
+        "Press any key to enter -- System Ready -- "
+        if os.geteuid()
+        else "CAUTION -!!- "
     )
-    if asmall:
-        prompt = "Terminal too small -- " + prompt
     repeated = prompt * (((awidth - 4) // len(prompt)) + 3)
 
     scroll_start = tix % len(prompt)
@@ -815,7 +817,7 @@ def animation() -> str:
 
 
 async def main() -> None:
-    global awidth, asmall
+    global awidth, tix
     info_task = get_system_info()
     services_task = count_failed_systemd()
     updates_task = get_updates()
@@ -1020,8 +1022,27 @@ async def main() -> None:
                     f'{colors.bold}{colors.yellow_t}{n}{colors.endc} services report status {colors.bold}{colors.yellow_t}"{i}"{colors.endc}\n'
                 )
 
-    awidth = max(len(nansi(line)) for line in phy_lines(msg))
-    asmall = awidth > terminal_size()[0]
+    plines = phy_lines(msg)
+    sz = terminal_size()
+    awidth = max(len(nansi(line)) for line in plines)
+    if (awidth > sz[0]) or (len(plines) > sz[1]):
+        kernl = list(msg[0])
+        kernst = kernl.index("(") + 1
+        kernend = kernl.index(")")
+        sps = 0
+        for i in range(kernst, kernend):
+            kernl[i] = " "
+            sps += 1
+        smallmsg = "Terminal too small"
+        if len(smallmsg) < sps and 0:
+            msg[0] = msg[0][:kernst] + colors.warning + smallmsg + colors.bland_t + ")"
+        else:
+            stm = ((sps - len(smallmsg)) // 2) + 1
+            kernl.insert(kernst + 1, colors.warning)
+            kernl.insert(kernend, colors.bland_t)
+            for i in range(len(smallmsg)):
+                kernl[kernst + stm + i] = smallmsg[i]
+            msg[0] = "".join(kernl)
     msg.append(animation())
 
     refresh_lines(msg)
