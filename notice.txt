@@ -1,7 +1,4 @@
-Now a message from our sponsors
-Raid Shadow Lege-
+rkr6 testing concluded, verdict sh*t performance.
+We're just gonna gear up for mainline+
 
-Ooops, wrong message
-
-We're looking for testers for the new rk3588 experimental kernel!
-Contact @rippanda12 on Discord/Telegram or email <panda@bredos.org>
+- Rudimentary Pancake Assembler
