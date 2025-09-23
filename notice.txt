@@ -1,4 +1,7 @@
-rkr6 testing concluded, verdict sh*t performance.
-We're just gonna gear up for mainline+
+Fund this campaign - Mainline RK3588 Support in BredOS
+
+Right now, BredOS images for RK3588 devices rely on
+the crusty Rockchip BSP kernel, we want to change that.
+https://wiki.bredos.org/en/campaigns/mainline-campaign
 
 - Rudimentary Pancake Assembler
