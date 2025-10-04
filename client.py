@@ -645,6 +645,7 @@ async def count_failed_systemd() -> dict:
     system_statuses = await get_service_statuses(
         "systemctl list-units --type=service --no-legend --no-pager | awk '{print $4}'"
     )
+
     # user_statuses = await get_service_statuses(
     #     "systemctl --user list-units --type=service --no-legend --no-pager | awk '{print $4}'"
     # )
@@ -964,14 +965,21 @@ async def main() -> None:
         if upd_str:
             msg.append(upd_str + "\n")
 
-    if not hush_news:
-        if hush_updates:
-            msg.append("\n")
-        if isinstance(updates, list):
-            news = updates[2]
-            msg += [(news if news else "Failed to fetch news.\n"), "\n"]
-        else:
-            msg += ["Failed to fetch news.", "\n", "\n"]
+    if os.getlogin() == "bred" and os.path.exists("/usr/bin/Bakery"):
+        msg.append(f"{colors.yellow_t}Setup is {colors.bold}INCOMPLETE{colors.endc}!\n")
+        msg.append(
+            f"If you wish to complete it from the command line, run `{colors.bland_t}{colors.bold}Bakery --tui{colors.endc}`\n"
+        )
+        msg.append("\n")
+    else:
+        if not hush_news:
+            if hush_updates:
+                msg.append("\n")
+            if isinstance(updates, list):
+                news = updates[2]
+                msg += [(news if news else "Failed to fetch news.\n"), "\n"]
+            else:
+                msg += ["Failed to fetch news.", "\n", "\n"]
 
     show_url = False
     if not hush_smart:
@@ -1062,6 +1070,29 @@ async def suspend(until: float) -> None:
         await delay(Time_Tick)
 
 
+def shell_inject(text: str) -> bool:
+    try:
+        for ch in text:
+            fcntl.ioctl(stdin, termios.TIOCSTI, ch.encode())
+        return True
+    except KeyboardInterrupt:
+        pass
+    except EOFError:
+        pass
+    except:
+        pass
+    return False
+
+
+def shortcut_handler(text: str) -> bool:
+    if text and text[0] in shortcuts.keys():
+        if not shell_inject(shortcuts[text[0]] + "\n"):
+            # Could not inject, launch normally instead.
+            pass
+    else:
+        shell_inject(text)
+
+
 async def loop_main() -> None:
     global screensaver_mode
     # Pure aneurism.
@@ -1103,14 +1134,13 @@ async def loop_main() -> None:
                 if dr != []:
                     buf = os.read(fd, 4096).decode(errors="ignore")
                     if (
-                        buf.isalnum() or len(buf) - 1 or ord(buf) in [4, 12]
+                        buf.isalnum()
+                        or len(buf) - 1
+                        or ord(buf) in [4, 12]
+                        or buf[0] in shortcuts.keys()
                     ) and not screensaver_mode:
                         # Do not inject if not a alphanum / Ctrl-D / Arrow key
-                        try:
-                            for ch in buf:
-                                fcntl.ioctl(stdin, termios.TIOCSTI, ch.encode())
-                        except:  # Injection failed, just exit.
-                            pass
+                        shortcut_handler(buf)
                     handle_exit()
             await suspend(stamp + Time_Refresh)
     except Exception as err:
@@ -1134,6 +1164,7 @@ Hush_Smart = None
 Time_Tick = 0.1
 Time_Refresh = 0.25
 
+shortcuts = {}
 
 newsrc_path = os.path.expanduser("~/.newsrc")
 if os.path.isfile(newsrc_path):
@@ -1159,7 +1190,11 @@ else:  # Install default template
                 + "# Hush_Disks = False\n"
                 + "# Hush_Smart = False\n"
                 + "# Time_Tick = 0.1\n"
-                + "# Time_Refresh = 0.25\n\n"
+                + "# Time_Refresh = 0.25\n"
+                + "\n"
+                + "shortcuts = {\n"
+                + '    # "!": "bredos-config",\n'
+                + "}\n"
             )
     except:
         pass
