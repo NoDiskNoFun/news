@@ -50,7 +50,7 @@ try:
 
     import asyncio, platform, psutil, socket, json, re
     import signal, shutil, termios, tty, select, fcntl
-    import subprocess
+    import subprocess, shlex, types
     from collections import Counter
     from pathlib import Path
     from datetime import datetime, timedelta
@@ -92,6 +92,8 @@ accent_dir = 1
 _nansi = {}
 _nansi_order = []
 _last_run_data = {}
+_run = []
+_shell = os.environ["SHELL"]
 
 
 def once(func):
@@ -1077,20 +1079,34 @@ def shell_inject(text: str) -> bool:
         return True
     except KeyboardInterrupt:
         pass
-    except EOFError:
-        pass
     except:
         pass
     return False
 
 
 def shortcut_handler(text: str) -> bool:
+    global _run
     if text and text[0] in shortcuts.keys():
-        if not shell_inject(shortcuts[text[0]] + "\n"):
-            # Could not inject, launch normally instead.
-            pass
+        shortcut = shortcuts[text[0]]
+        if isinstance(shortcut, (types.FunctionType, types.BuiltinFunctionType)):
+            try:  # Yay, arbitrary code goooooooo
+                shortcut()
+            except KeyboardInterrupt:
+                pass
+            except:
+                pass
+        elif not shell_inject(f" {shortcut}\n"):
+            _run = [_shell, "-c", f'eval "{shortcut}"; exec {_shell}']
     else:
         shell_inject(text)
+
+
+def kill_parent(sig=signal.SIGKILL):
+    parent_pid = os.getppid()
+    try:
+        os.kill(parent_pid, sig)
+    except:
+        pass
 
 
 async def loop_main() -> None:
@@ -1119,6 +1135,16 @@ async def loop_main() -> None:
             pass
         except:
             pass
+
+        if _run:
+            try:
+                subprocess.run(_run)
+                kill_parent()
+            except KeyboardInterrupt:
+                pass
+            except:
+                pass
+
         os._exit(0)
 
     signal.signal(signal.SIGINT, handle_exit)
@@ -1142,6 +1168,8 @@ async def loop_main() -> None:
                         # Do not inject if not a alphanum / Ctrl-D / Arrow key
                         shortcut_handler(buf)
                     handle_exit()
+            if Onetime:
+                handle_exit()
             await suspend(stamp + Time_Refresh)
     except Exception as err:
         print("\nUNHANDLED EXCEPTION!\n")
@@ -1163,6 +1191,7 @@ Hush_Disks = None
 Hush_Smart = None
 Time_Tick = 0.1
 Time_Refresh = 0.25
+Onetime = False
 
 shortcuts = {}
 
@@ -1191,10 +1220,13 @@ else:  # Install default template
                 + "# Hush_Smart = False\n"
                 + "# Time_Tick = 0.1\n"
                 + "# Time_Refresh = 0.25\n"
+                + "# Onetime = False\n"
                 + "\n"
-                + "shortcuts = {\n"
-                + '    # "!": "bredos-config",\n'
-                + "}\n"
+                + "# Shortcuts configuration\n"
+                + "\n"
+                + "# shortcuts = {\n"
+                + '#     "1": "bredos-config",\n'
+                + "# }\n"
             )
     except:
         pass
