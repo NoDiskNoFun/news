@@ -80,6 +80,47 @@ def terminal_size() -> tuple:
 
 
 CACHE_FILE = "/tmp/news_cache.json"
+
+DEFAULT_CONF = """\"\"\"
+BredOS-News Configuration
+
+Refer to `https://wiki.bredos.org/e/en/customizations/news`,
+for detailed instructions on how to configure.
+\"\"\"
+
+# Accent = "\\033[38;5;129m"
+# Accent_Secondary = "\\033[38;5;104m"
+
+# Hush_Updates = False
+# Hush_Disks = False
+# Hush_Smart = False
+# Time_Tick = 0.1
+# Time_Refresh = 0.25
+# Onetime = False
+
+\"\"\"
+Shortcuts configuration
+
+Shell commands, using $SHELL, and python functions are fully supported.
+Only alphanumeric and symbol keys can be captured, no key combinations.
+Capital keys work and can be bound to seperate shortcuts from lowercase.
+\"\"\"
+
+def shortcuts_help() -> None:
+    print("Configured shortcuts:")
+    for i in shortcuts.keys():
+        shortcut = shortcuts[i]
+        if is_function(shortcut):
+            print(f" - {i}: Function {shortcut.__name__}")
+        else:
+            print(f' - {i}: \"{shortcuts[i]}\"')
+    print("\\n")
+
+shortcuts["1"] = "bredos-config"
+shortcuts["0"] = "sudo sys-report"
+shortcuts["?"] = shortcuts_help
+"""
+
 printed_lines = 0
 last_lines = []
 last_size = terminal_size()
@@ -1084,11 +1125,15 @@ def shell_inject(text: str) -> bool:
     return False
 
 
+def is_function(obj) -> bool:
+    return isinstance(obj, (types.FunctionType, types.BuiltinFunctionType))
+
+
 def shortcut_handler(text: str) -> bool:
     global _run
     if text and text[0] in shortcuts.keys():
         shortcut = shortcuts[text[0]]
-        if isinstance(shortcut, (types.FunctionType, types.BuiltinFunctionType)):
+        if is_function(shortcut):
             try:  # Yay, arbitrary code goooooooo
                 shortcut()
             except KeyboardInterrupt:
@@ -1206,30 +1251,13 @@ if os.path.isfile(newsrc_path):
             )
         except:
             print("Exception while loading `~/.newsrc`, ignoring.")
-else:  # Install default template
+else:  # Install and run default configuration
     try:
         with open(newsrc_path, "w") as f:
-            f.write(
-                "# BredOS-News Configuration\n"
-                + "\n"
-                + '# Accent = "\\033[38;5;129m"\n'
-                + '# Accent_Secondary = "\\033[38;5;104m"\n'
-                + "\n"
-                + "# Hush_Updates = False\n"
-                + "# Hush_Disks = False\n"
-                + "# Hush_Smart = False\n"
-                + "# Time_Tick = 0.1\n"
-                + "# Time_Refresh = 0.25\n"
-                + "# Onetime = False\n"
-                + "\n"
-                + "# Shortcuts configuration\n"
-                + "\n"
-                + "# shortcuts = {\n"
-                + '#     "1": "bredos-config",\n'
-                + "# }\n"
-            )
+            f.write(DEFAULT_CONF)
     except:
         pass
+    exec(DEFAULT_CONF, globals())
 
 # Inject settings
 try:
