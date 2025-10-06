@@ -84,7 +84,7 @@ CACHE_FILE = "/tmp/news_cache.json"
 DEFAULT_CONF = """\"\"\"
 BredOS-News Configuration
 
-Refer to `https://wiki.bredos.org/e/en/customizations/news`,
+Refer to `https://wiki.bredos.org/customizations/news`,
 for detailed instructions on how to configure.
 \"\"\"
 
